@@ -9,6 +9,7 @@ import AiConsole from './pages/AiConsole.jsx'
 import Reporting from './pages/Reporting.jsx'
 import FounderDashboard from './pages/FounderDashboard.jsx'
 import InvestorDashboard from './pages/InvestorDashboard.jsx'
+import Communications from './pages/Communications.jsx'
 import Layout from './components/Layout.jsx'
 import { AppProvider } from './context/AppContext.jsx'
 
@@ -25,6 +26,7 @@ export default function App() {
           <Route path="/scheduling" element={<Scheduling />} />
           <Route path="/billing" element={<Billing />} />
           <Route path="/ai-console" element={<AiConsole />} />
+          <Route path="/communications" element={<Communications />} />
           <Route path="/reporting" element={<Reporting />} />
           <Route path="/founder" element={<FounderDashboard />} />
           <Route path="/investor" element={<InvestorDashboard />} />

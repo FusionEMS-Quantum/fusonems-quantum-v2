@@ -5,6 +5,7 @@ python-jose
 pydantic
 pydantic-settings
 email-validator
+telnyx
 psycopg2-binary
 passlib[bcrypt]
 bcrypt<5.0.0

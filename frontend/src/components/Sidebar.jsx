@@ -7,6 +7,7 @@ const navItems = [
   { to: '/epcr', label: 'ePCR', hint: 'Patient care reports' },
   { to: '/scheduling', label: 'Scheduling', hint: 'Coverage & shifts' },
   { to: '/billing', label: 'Billing Ops', hint: 'Claims & reconciliation' },
+  { to: '/communications', label: 'Communications', hint: 'Telnyx voice/SMS' },
   { to: '/ai-console', label: 'AI Console', hint: 'Predictions & guidance' },
   { to: '/reporting', label: 'Reporting', hint: 'Compliance & QA' },
   { to: '/founder', label: 'Founder', hint: 'Enterprise controls' },

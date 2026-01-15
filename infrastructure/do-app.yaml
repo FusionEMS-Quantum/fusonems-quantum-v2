@@ -27,6 +27,15 @@ services:
       - key: TELNYX_API_KEY
         scope: RUN_TIME
         type: SECRET
+      - key: TELNYX_NUMBER
+        scope: RUN_TIME
+        type: SECRET
+      - key: TELNYX_CONNECTION_ID
+        scope: RUN_TIME
+        type: SECRET
+      - key: TELNYX_MESSAGING_PROFILE_ID
+        scope: RUN_TIME
+        type: SECRET
       - key: OFFICEALLY_FTP_HOST
         scope: RUN_TIME
         type: SECRET
