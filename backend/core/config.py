@@ -1,6 +1,6 @@
 from typing import Optional
 from pydantic_settings import BaseSettings
-from pydantic import Field, model_validator
+from pydantic import Field
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = Field("FusonEMS Quantum", env="PROJECT_NAME")
@@ -70,41 +70,42 @@ class Settings(BaseSettings):
     STRIPE_PRICE_ID_QA_LEGAL: str = Field("", env="STRIPE_PRICE_ID_QA_LEGAL")
     STRIPE_ENFORCE_ENTITLEMENTS: bool = Field(False, env="STRIPE_ENFORCE_ENTITLEMENTS")
     SMART_MODE: bool = Field(True, env="SMART_MODE")
-    @model_validator(mode="after")
-    def validate_runtime(self):
-        if self.ENV == "production":
-            if not self.JWT_SECRET_KEY or self.JWT_SECRET_KEY == "change-me":
-                raise ValueError("JWT_SECRET_KEY must be set for production.")
-            if not self.STORAGE_ENCRYPTION_KEY or self.STORAGE_ENCRYPTION_KEY == "change-me":
-                raise ValueError("STORAGE_ENCRYPTION_KEY must be set for production.")
-            if not self.DOCS_ENCRYPTION_KEY or self.DOCS_ENCRYPTION_KEY == "change-me":
-                raise ValueError("DOCS_ENCRYPTION_KEY must be set for production.")
-            if self.DOCS_STORAGE_BACKEND not in {"local", "s3"}:
-                raise ValueError("DOCS_STORAGE_BACKEND must be 'local' or 's3'.")
-            if self.DOCS_STORAGE_BACKEND == "s3":
-                if not self.DOCS_S3_BUCKET:
-                    raise ValueError("DOCS_S3_BUCKET must be set for S3 storage.")
-                if not self.DOCS_S3_ACCESS_KEY or not self.DOCS_S3_SECRET_KEY:
-                    raise ValueError("DOCS_S3_ACCESS_KEY and DOCS_S3_SECRET_KEY are required for S3 storage.")
-            if self.OIDC_ENABLED:
-                if not self.OIDC_ISSUER_URL:
-                    raise ValueError("OIDC_ISSUER_URL must be set when OIDC is enabled.")
-                if not self.OIDC_CLIENT_ID:
-                    raise ValueError("OIDC_CLIENT_ID must be set when OIDC is enabled.")
-                if not self.OIDC_REDIRECT_URI:
-                    raise ValueError("OIDC_REDIRECT_URI must be set when OIDC is enabled.")
-            if self.TELNYX_REQUIRE_SIGNATURE and not self.TELNYX_PUBLIC_KEY:
-                raise ValueError("TELNYX_PUBLIC_KEY must be set when signature verification is enabled.")
-            if self.POSTMARK_REQUIRE_SIGNATURE and not self.POSTMARK_SERVER_TOKEN:
-                raise ValueError("POSTMARK_SERVER_TOKEN must be set when signature verification is enabled.")
-            if self.STRIPE_SECRET_KEY and self.STRIPE_ENV not in {"test", "live"}:
-                raise ValueError("STRIPE_ENV must be 'test' or 'live'.")
-            if self.STRIPE_SECRET_KEY and self.STRIPE_WEBHOOK_SECRET == "":
-                raise ValueError("STRIPE_WEBHOOK_SECRET must be set when Stripe is enabled.")
-        return self
-
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
 
 settings = Settings()
+
+def validate_settings_runtime(settings: Settings) -> None:
+    if settings.ENV != "production":
+        return
+    if not settings.DATABASE_URL:
+        raise RuntimeError("DATABASE_URL must be set for production.")
+    if not settings.JWT_SECRET_KEY or settings.JWT_SECRET_KEY == "change-me":
+        raise RuntimeError("JWT_SECRET_KEY must be set for production.")
+    if not settings.STORAGE_ENCRYPTION_KEY or settings.STORAGE_ENCRYPTION_KEY == "change-me":
+        raise RuntimeError("STORAGE_ENCRYPTION_KEY must be set for production.")
+    if not settings.DOCS_ENCRYPTION_KEY or settings.DOCS_ENCRYPTION_KEY == "change-me":
+        raise RuntimeError("DOCS_ENCRYPTION_KEY must be set for production.")
+    if settings.DOCS_STORAGE_BACKEND not in {"local", "s3"}:
+        raise RuntimeError("DOCS_STORAGE_BACKEND must be 'local' or 's3'.")
+    if settings.DOCS_STORAGE_BACKEND == "s3":
+        if not settings.DOCS_S3_BUCKET:
+            raise RuntimeError("DOCS_S3_BUCKET must be set for S3 storage.")
+        if not settings.DOCS_S3_ACCESS_KEY or not settings.DOCS_S3_SECRET_KEY:
+            raise RuntimeError("DOCS_S3_ACCESS_KEY and DOCS_S3_SECRET_KEY are required for S3 storage.")
+    if settings.OIDC_ENABLED:
+        if not settings.OIDC_ISSUER_URL:
+            raise RuntimeError("OIDC_ISSUER_URL must be set when OIDC is enabled.")
+        if not settings.OIDC_CLIENT_ID:
+            raise RuntimeError("OIDC_CLIENT_ID must be set when OIDC is enabled.")
+        if not settings.OIDC_REDIRECT_URI:
+            raise RuntimeError("OIDC_REDIRECT_URI must be set when OIDC is enabled.")
+    if settings.TELNYX_REQUIRE_SIGNATURE and not settings.TELNYX_PUBLIC_KEY:
+        raise RuntimeError("TELNYX_PUBLIC_KEY must be set when signature verification is enabled.")
+    if settings.POSTMARK_REQUIRE_SIGNATURE and not settings.POSTMARK_SERVER_TOKEN:
+        raise RuntimeError("POSTMARK_SERVER_TOKEN must be set when signature verification is enabled.")
+    if settings.STRIPE_SECRET_KEY and settings.STRIPE_ENV not in {"test", "live"}:
+        raise RuntimeError("STRIPE_ENV must be 'test' or 'live'.")
+    if settings.STRIPE_SECRET_KEY and settings.STRIPE_WEBHOOK_SECRET == "":
+        raise RuntimeError("STRIPE_WEBHOOK_SECRET must be set when Stripe is enabled.")

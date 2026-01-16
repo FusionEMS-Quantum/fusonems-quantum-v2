@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from urllib.parse import urlparse
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from core.config import settings
+from core.config import settings, validate_settings_runtime
 from sqlalchemy import text
 
 from core.database import Base, FireBase, HemsBase, TelehealthBase, engine, fire_engine, hems_engine, telehealth_engine
@@ -171,8 +171,7 @@ app.include_router(business_ops_router)
 @app.on_event("startup")
 def startup() -> None:
     register_event_handlers()
-    if settings.ENV == "production" and not settings.DATABASE_URL:
-        raise RuntimeError("DATABASE_URL must be set for production.")
+    validate_settings_runtime(settings)
     try:
         db_host = urlparse(settings.DATABASE_URL).hostname or "unknown"
     except Exception:
