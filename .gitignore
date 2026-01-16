@@ -8,3 +8,7 @@ node_modules/
 frontend/dist/
 frontend/dist-ssr/
 __pycache__/
+# Local databases
+prod.db
+test.db
+*.db
