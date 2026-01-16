@@ -175,7 +175,7 @@ def startup() -> None:
         db_host = urlparse(settings.DATABASE_URL).hostname or "unknown"
     except Exception:
         db_host = "unknown"
-    logger.info("DATABASE_URL host: %s", db_host)
+    logger.warning("DATABASE_URL host: %s", db_host)
     try:
         Base.metadata.create_all(bind=engine)
     except Exception as exc:
