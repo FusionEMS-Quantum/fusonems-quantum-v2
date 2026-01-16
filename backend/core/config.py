@@ -1,9 +1,10 @@
+from typing import Optional
 from pydantic_settings import BaseSettings
 from pydantic import Field, model_validator
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = Field("FusonEMS Quantum", env="PROJECT_NAME")
-    DATABASE_URL: str = Field("postgresql://admin:securepass@localhost:5432/fusonems", env="DATABASE_URL")
+    DATABASE_URL: Optional[str] = Field("", env="DATABASE_URL")
     ALLOWED_ORIGINS: str = Field("http://localhost:5173", env="ALLOWED_ORIGINS")
     JWT_SECRET_KEY: str = Field("change-me", env="JWT_SECRET_KEY")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(60, env="ACCESS_TOKEN_EXPIRE_MINUTES")
@@ -72,8 +73,6 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_runtime(self):
         if self.ENV == "production":
-            if not self.DATABASE_URL or "securepass" in self.DATABASE_URL:
-                raise ValueError("DATABASE_URL must be set for production.")
             if not self.JWT_SECRET_KEY or self.JWT_SECRET_KEY == "change-me":
                 raise ValueError("JWT_SECRET_KEY must be set for production.")
             if not self.STORAGE_ENCRYPTION_KEY or self.STORAGE_ENCRYPTION_KEY == "change-me":

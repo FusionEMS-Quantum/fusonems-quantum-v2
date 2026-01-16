@@ -171,6 +171,8 @@ app.include_router(business_ops_router)
 @app.on_event("startup")
 def startup() -> None:
     register_event_handlers()
+    if settings.ENV == "production" and not settings.DATABASE_URL:
+        raise RuntimeError("DATABASE_URL must be set for production.")
     try:
         db_host = urlparse(settings.DATABASE_URL).hostname or "unknown"
     except Exception:
