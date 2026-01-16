@@ -112,3 +112,57 @@ export const fallbackInvestorKpis = [
   { label: 'Gross Margin', value: '62%', delta: '+4%' },
   { label: 'Agencies Live', value: '47', delta: '+5' },
 ]
+
+export const fallbackModules = [
+  { module_key: 'CAD', enabled: true, kill_switch: false, health_state: 'HEALTHY' },
+  { module_key: 'EPCR', enabled: true, kill_switch: false, health_state: 'HEALTHY' },
+  { module_key: 'BILLING', enabled: true, kill_switch: false, health_state: 'HEALTHY' },
+  { module_key: 'FIRE', enabled: true, kill_switch: false, health_state: 'HEALTHY' },
+  { module_key: 'TELEHEALTH', enabled: true, kill_switch: false, health_state: 'HEALTHY' },
+  { module_key: 'HEMS', enabled: true, kill_switch: false, health_state: 'HEALTHY' },
+  { module_key: 'COMMS', enabled: true, kill_switch: false, health_state: 'HEALTHY' },
+  { module_key: 'SCHEDULING', enabled: true, kill_switch: false, health_state: 'HEALTHY' },
+  { module_key: 'AUTOMATION', enabled: true, kill_switch: false, health_state: 'HEALTHY' },
+  { module_key: 'COMPLIANCE', enabled: true, kill_switch: false, health_state: 'HEALTHY' },
+  { module_key: 'AI_CONSOLE', enabled: true, kill_switch: false, health_state: 'HEALTHY' },
+  { module_key: 'FOUNDER', enabled: true, kill_switch: false, health_state: 'HEALTHY' },
+]
+
+export const fallbackSystemHealth = {
+  status: 'online',
+  recent_events: 18,
+  last_event_at: new Date().toISOString(),
+  upgrade: { status: 'PASS', issues: [], missing_modules: [] },
+}
+
+export const fallbackHemsMissions = [
+  {
+    id: 901,
+    mission_type: 'scene',
+    requesting_party: 'Metro Dispatch',
+    pickup_location: 'I-94 Mile 128',
+    destination_location: 'Regional Trauma Center',
+    status: 'accepted',
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: 902,
+    mission_type: 'ift',
+    requesting_party: 'St. Luke Hospital',
+    pickup_location: 'St. Luke ICU',
+    destination_location: 'Cardiac Specialty Center',
+    status: 'lifted',
+    created_at: new Date().toISOString(),
+  },
+]
+
+export const fallbackHemsAircraft = [
+  { id: 41, tail_number: 'N712Q', availability: 'Available', maintenance_status: 'Green' },
+  { id: 42, tail_number: 'N88FX', availability: 'On Mission', maintenance_status: 'Yellow' },
+]
+
+export const fallbackHemsCrew = [
+  { id: 11, full_name: 'Captain R. Lawson', role: 'pilot', duty_status: 'Ready' },
+  { id: 12, full_name: 'Skylar Holt', role: 'flight_nurse', duty_status: 'On Duty' },
+  { id: 13, full_name: 'J. Patel', role: 'flight_medic', duty_status: 'Resting' },
+]

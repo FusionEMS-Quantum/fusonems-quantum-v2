@@ -4,7 +4,17 @@ import lob
 
 router = APIRouter(prefix="/api/lob", tags=["Lob Webhook"])
 
-lob_client = lob.Lob(api_key=os.environ.get("LOB_API_KEY"))
+
+def _get_lob_client():
+    api_key = os.environ.get("LOB_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=412, detail="LOB API key not configured")
+    if hasattr(lob, "Lob"):
+        return lob.Lob(api_key=api_key)
+    if hasattr(lob, "Client"):
+        return lob.Client(api_key=api_key)
+    lob.api_key = api_key
+    return lob
 
 
 @router.post("/send")
@@ -25,6 +35,7 @@ async def send_letter(request: Request):
         )
         content_html = data.get("content", "<html><body><h1>FusonEMS</h1></body></html>")
 
+        lob_client = _get_lob_client()
         letter = lob_client.letters.create(
             description="FusonEMS Dispatch Letter",
             to_address=to_address,

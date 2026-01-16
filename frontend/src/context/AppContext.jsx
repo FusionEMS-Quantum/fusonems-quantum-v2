@@ -7,6 +7,8 @@ import {
   fallbackShifts,
   fallbackInvoices,
   fallbackInsights,
+  fallbackModules,
+  fallbackSystemHealth,
 } from '../data/fallback.js'
 
 const AppContext = createContext(null)
@@ -25,6 +27,12 @@ export function AppProvider({ children }) {
   const [invoices, setInvoices] = useState(fallbackInvoices)
   const [insights, setInsights] = useState(fallbackInsights)
   const [lastSync, setLastSync] = useState('')
+  const [trainingStatus, setTrainingStatus] = useState({
+    org_mode: 'DISABLED',
+    user_mode: false,
+  })
+  const [modules, setModules] = useState(fallbackModules)
+  const [systemHealth, setSystemHealth] = useState(fallbackSystemHealth)
 
   const refreshAll = useCallback(async () => {
     try {
@@ -56,6 +64,28 @@ export function AppProvider({ children }) {
       if (Array.isArray(insightsData)) {
         setInsights(insightsData)
       }
+      try {
+        const trainingData = await apiFetch('/api/training/status')
+        if (trainingData?.org_mode) {
+          setTrainingStatus(trainingData)
+        }
+      } catch (trainingError) {
+        console.warn('Training status unavailable', trainingError)
+      }
+      try {
+        const [moduleData, healthData] = await Promise.all([
+          apiFetch('/api/system/modules'),
+          apiFetch('/api/system/health'),
+        ])
+        if (Array.isArray(moduleData)) {
+          setModules(moduleData)
+        }
+        if (healthData?.status) {
+          setSystemHealth(healthData)
+        }
+      } catch (healthError) {
+        console.warn('System health unavailable', healthError)
+      }
       setLastSync(formatTime(new Date()))
     } catch (error) {
       console.warn('Live refresh failed, using cached data.', error)
@@ -70,10 +100,25 @@ export function AppProvider({ children }) {
       shifts,
       invoices,
       insights,
+      trainingStatus,
+      modules,
+      systemHealth,
       lastSync,
       refreshAll,
     }),
-    [calls, units, patients, shifts, invoices, insights, lastSync, refreshAll]
+    [
+      calls,
+      units,
+      patients,
+      shifts,
+      invoices,
+      insights,
+      trainingStatus,
+      modules,
+      systemHealth,
+      lastSync,
+      refreshAll,
+    ]
   )
 
   useEffect(() => {

@@ -1,16 +1,23 @@
 from math import asin, cos, radians, sin, sqrt
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from core.database import get_db
+from core.guards import require_module
 from core.security import require_roles
 from models.cad import Call, Dispatch, Unit
-from models.user import UserRole
+from models.user import User, UserRole
 from utils.logger import logger
+from utils.write_ops import apply_training_mode, audit_and_event, model_snapshot
+from utils.tenancy import get_scoped_record, scoped_query
 
-router = APIRouter(prefix="/api/cad", tags=["CAD"])
+router = APIRouter(
+    prefix="/api/cad",
+    tags=["CAD"],
+    dependencies=[Depends(require_module("CAD"))],
+)
 
 
 class CallCreate(BaseModel):
@@ -68,60 +75,138 @@ def _estimate_eta(distance_km: float, speed_kph: float = 60.0) -> int:
 @router.post("/calls", response_model=CallResponse, status_code=status.HTTP_201_CREATED)
 def create_call(
     payload: CallCreate,
+    request: Request,
     db: Session = Depends(get_db),
-    _user=Depends(require_roles(UserRole.admin, UserRole.dispatcher)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher)),
 ):
-    call = Call(**payload.dict())
+    call = Call(**payload.dict(), org_id=user.org_id)
+    apply_training_mode(call, request)
     db.add(call)
     db.commit()
     db.refresh(call)
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="create",
+        resource="cad_call",
+        classification=call.classification,
+        after_state=model_snapshot(call),
+        event_type="RUN_CREATED",
+        event_payload={"call_id": call.id, "priority": call.priority},
+    )
     logger.info("Call logged %s", call.id)
     return call
 
 
 @router.get("/calls", response_model=list[CallResponse])
-def list_calls(db: Session = Depends(get_db)):
-    return db.query(Call).order_by(Call.created_at.desc()).all()
+def list_calls(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles()),
+):
+    return scoped_query(db, Call, user.org_id, request.state.training_mode).order_by(
+        Call.created_at.desc()
+    ).all()
 
 
 @router.get("/units")
-def get_units(db: Session = Depends(get_db)):
-    units = db.query(Unit).order_by(Unit.unit_identifier.asc()).all()
+def get_units(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles()),
+):
+    units = scoped_query(db, Unit, user.org_id, request.state.training_mode).order_by(
+        Unit.unit_identifier.asc()
+    ).all()
     return {"active_units": units}
 
 
 @router.post("/units", status_code=status.HTTP_201_CREATED)
 def create_unit(
     payload: UnitCreate,
+    request: Request,
     db: Session = Depends(get_db),
-    _user=Depends(require_roles(UserRole.admin, UserRole.dispatcher)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher)),
 ):
-    unit = Unit(**payload.dict())
+    unit = Unit(**payload.dict(), org_id=user.org_id)
+    apply_training_mode(unit, request)
     db.add(unit)
     db.commit()
     db.refresh(unit)
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="create",
+        resource="cad_unit",
+        classification=unit.classification,
+        after_state=model_snapshot(unit),
+        event_type="RECORD_WRITTEN",
+        event_payload={"unit_identifier": unit.unit_identifier},
+    )
     return unit
 
 
 @router.post("/dispatch")
 def dispatch_unit(
     payload: DispatchRequest,
+    request: Request,
     db: Session = Depends(get_db),
-    _user=Depends(require_roles(UserRole.admin, UserRole.dispatcher)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher)),
 ):
-    call = db.query(Call).filter(Call.id == payload.call_id).first()
-    if not call:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Call not found")
-    unit = db.query(Unit).filter(Unit.unit_identifier == payload.unit_identifier).first()
+    call = get_scoped_record(db, request, Call, payload.call_id, user)
+    call_before = model_snapshot(call)
+    unit = scoped_query(db, Unit, user.org_id, request.state.training_mode).filter(
+        Unit.unit_identifier == payload.unit_identifier
+    ).first()
     if not unit:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unit not found")
     distance_km = _haversine(call.latitude, call.longitude, unit.latitude, unit.longitude)
     eta_minutes = _estimate_eta(distance_km)
     call.eta_minutes = eta_minutes
     call.status = "Dispatched"
+    unit_before = model_snapshot(unit)
     unit.status = "En Route"
-    dispatch = Dispatch(call_id=call.id, unit_id=unit.id, status="Dispatched")
+    dispatch = Dispatch(call_id=call.id, unit_id=unit.id, status="Dispatched", org_id=user.org_id)
+    apply_training_mode(dispatch, request)
     db.add(dispatch)
     db.commit()
+    db.refresh(dispatch)
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="update",
+        resource="cad_call",
+        classification=call.classification,
+        before_state=call_before,
+        after_state=model_snapshot(call),
+        event_type="UNIT_ASSIGNED",
+        event_payload={"call_id": call.id, "unit_identifier": unit.unit_identifier},
+    )
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="update",
+        resource="cad_unit",
+        classification=unit.classification,
+        before_state=unit_before,
+        after_state=model_snapshot(unit),
+        event_type="TRANSPORT_STARTED",
+        event_payload={"call_id": call.id, "status": call.status},
+    )
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="create",
+        resource="cad_dispatch",
+        classification=dispatch.classification,
+        after_state=model_snapshot(dispatch),
+        event_type="UNIT_ASSIGNED",
+        event_payload={"dispatch_id": dispatch.id, "call_id": call.id},
+    )
     logger.info("Dispatching %s to call %s", unit.unit_identifier, call.id)
     return {"status": "dispatched", "eta_minutes": eta_minutes}

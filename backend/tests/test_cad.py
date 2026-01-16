@@ -7,6 +7,7 @@ def _auth_headers(client, role="dispatcher"):
             "full_name": "CAD User",
             "password": "securepass",
             "role": role,
+            "organization_name": "TestOrg",
         },
     )
     token = response.json()["access_token"]
@@ -36,6 +37,6 @@ def test_create_call_and_unit(client):
     response = client.post("/api/cad/units", json=unit_payload, headers=headers)
     assert response.status_code == 201
 
-    response = client.get("/api/cad/units")
+    response = client.get("/api/cad/units", headers=headers)
     assert response.status_code == 200
     assert response.json()["active_units"]

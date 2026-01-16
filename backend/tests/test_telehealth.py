@@ -6,6 +6,7 @@ def _auth_headers(client, role="provider"):
             "full_name": "Telehealth User",
             "password": "securepass",
             "role": role,
+            "organization_name": "TestOrg",
         },
     )
     token = response.json()["access_token"]

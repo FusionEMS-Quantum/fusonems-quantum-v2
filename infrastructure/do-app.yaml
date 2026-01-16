@@ -51,6 +51,9 @@ services:
       - key: OPENID_SECRET
         scope: RUN_TIME
         type: SECRET
+      - key: FIRE_DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
       - key: OFFICEALLY_FTP_HOST
         scope: RUN_TIME
         type: SECRET

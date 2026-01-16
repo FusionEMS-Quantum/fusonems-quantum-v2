@@ -5,6 +5,7 @@ def test_register_and_login(client):
         "full_name": "Dispatch Lead",
         "password": "securepass",
         "role": "dispatcher",
+        "organization_name": "TestOrg",
     }
     response = client.post("/api/auth/register", json=register_payload)
     assert response.status_code == 201

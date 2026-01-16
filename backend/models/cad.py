@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, func
 from sqlalchemy.orm import relationship
 
 from core.database import Base
@@ -8,6 +8,9 @@ class Call(Base):
     __tablename__ = "cad_calls"
 
     id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    classification = Column(String, default="OPS")
+    training_mode = Column(Boolean, default=False)
     caller_name = Column(String, nullable=False)
     caller_phone = Column(String, nullable=False)
     location_address = Column(String, nullable=False)
@@ -25,6 +28,9 @@ class Unit(Base):
     __tablename__ = "cad_units"
 
     id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    classification = Column(String, default="OPS")
+    training_mode = Column(Boolean, default=False)
     unit_identifier = Column(String, unique=True, nullable=False, index=True)
     status = Column(String, default="Available")
     latitude = Column(Float, nullable=False, default=0.0)
@@ -38,6 +44,9 @@ class Dispatch(Base):
     __tablename__ = "cad_dispatches"
 
     id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    classification = Column(String, default="OPS")
+    training_mode = Column(Boolean, default=False)
     call_id = Column(Integer, ForeignKey("cad_calls.id"), nullable=False)
     unit_id = Column(Integer, ForeignKey("cad_units.id"), nullable=False)
     status = Column(String, default="Dispatched")

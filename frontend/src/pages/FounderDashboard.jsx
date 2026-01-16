@@ -1,8 +1,25 @@
 import StatCard from '../components/StatCard.jsx'
 import SectionHeader from '../components/SectionHeader.jsx'
+import DataTable from '../components/DataTable.jsx'
+import { useAppData } from '../context/AppContext.jsx'
 import { fallbackFounderKpis } from '../data/fallback.js'
 
 export default function FounderDashboard() {
+  const { modules, systemHealth } = useAppData()
+  const moduleColumns = [
+    { key: 'module_key', label: 'Module' },
+    { key: 'health_state', label: 'Health' },
+    { key: 'enabled', label: 'Enabled' },
+    { key: 'kill_switch', label: 'Kill Switch' },
+  ]
+  const moduleRows = modules.map((module) => ({
+    module_key: module.module_key,
+    health_state: module.health_state || 'UNKNOWN',
+    enabled: module.enabled ? 'Yes' : 'No',
+    kill_switch: module.kill_switch ? 'On' : 'Off',
+  }))
+  const upgradeStatus = systemHealth?.upgrade?.status || 'UNKNOWN'
+
   return (
     <div className="page">
       <SectionHeader
@@ -34,6 +51,19 @@ export default function FounderDashboard() {
             <li>Encryption at rest verified for all clinical data.</li>
           </ul>
         </div>
+      </div>
+
+      <div className="panel">
+        <SectionHeader
+          eyebrow="System Health"
+          title={`Upgrade Readiness: ${upgradeStatus}`}
+          action={<button className="ghost-button">Open Health Center</button>}
+        />
+        <DataTable
+          columns={moduleColumns}
+          rows={moduleRows}
+          emptyState="Module registry not available yet."
+        />
       </div>
     </div>
   )

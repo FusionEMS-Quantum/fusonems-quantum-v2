@@ -1,16 +1,26 @@
 import os
+from pathlib import Path
+
+db_path = Path("test.db")
+if db_path.exists():
+    db_path.unlink()
 
 os.environ["DATABASE_URL"] = "sqlite:///./test.db"
+os.environ["TELEHEALTH_DATABASE_URL"] = "sqlite:///./test.db"
+os.environ["FIRE_DATABASE_URL"] = "sqlite:///./test.db"
 os.environ["JWT_SECRET_KEY"] = "test-secret"
 
 from fastapi.testclient import TestClient
 
-from core.database import Base, engine
+from core.database import Base, FireBase, HemsBase, TelehealthBase, engine
 from main import app
 
 
 def create_test_client():
     Base.metadata.create_all(bind=engine)
+    FireBase.metadata.create_all(bind=engine)
+    TelehealthBase.metadata.create_all(bind=engine)
+    HemsBase.metadata.create_all(bind=engine)
     return TestClient(app)
 
 

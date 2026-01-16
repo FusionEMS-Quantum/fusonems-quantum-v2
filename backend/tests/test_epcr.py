@@ -7,6 +7,7 @@ def _auth_headers(client, role="provider"):
             "full_name": "Provider User",
             "password": "securepass",
             "role": role,
+            "organization_name": "TestOrg",
         },
     )
     token = response.json()["access_token"]
@@ -29,5 +30,5 @@ def test_create_patient(client):
     assert response.status_code == 201
     patient_id = response.json()["id"]
 
-    response = client.get(f"/api/epcr/patients/{patient_id}")
+    response = client.get(f"/api/epcr/patients/{patient_id}", headers=headers)
     assert response.status_code == 200

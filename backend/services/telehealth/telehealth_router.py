@@ -2,23 +2,35 @@ from datetime import datetime
 from uuid import uuid4
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from core.config import settings
 from core.database import SessionLocal, get_db, get_telehealth_db
+from core.guards import require_module
 from core.security import require_roles
 from models.business_ops import BusinessOpsTask
+from models.consent import ConsentProvenance
 from models.telehealth import TelehealthMessage, TelehealthParticipant, TelehealthSession
-from models.user import UserRole
+from models.user import User, UserRole
+from utils.tenancy import get_scoped_record, scoped_query
+from utils.legal import enforce_legal_hold
+from utils.write_ops import apply_training_mode, audit_and_event, model_snapshot
 
-router = APIRouter(prefix="/api/telehealth", tags=["Telehealth"])
+router = APIRouter(
+    prefix="/api/telehealth",
+    tags=["Telehealth"],
+    dependencies=[Depends(require_module("TELEHEALTH"))],
+)
 
 
 class SessionCreate(BaseModel):
     title: str
     host_name: str
+    consent_captured: bool = True
+    consent_context: str = "telehealth_intake"
+    policy_hash: str = ""
 
 
 class SessionResponse(BaseModel):
@@ -44,13 +56,15 @@ class MessageCreate(BaseModel):
     message: str
 
 
-def _log_alert(db: Session, session_uuid: str, message: str) -> None:
-    alert = TelehealthMessage(session_uuid=session_uuid, sender="system", message=message)
+def _log_alert(db: Session, session_uuid: str, message: str, org_id: int) -> None:
+    alert = TelehealthMessage(
+        session_uuid=session_uuid, sender="system", message=message, org_id=org_id
+    )
     db.add(alert)
     db.commit()
 
 
-def _create_integration_task(session_uuid: str, title: str, integration: str) -> None:
+def _create_integration_task(session_uuid: str, title: str, integration: str, org_id: int) -> None:
     try:
         db = SessionLocal()
         task = BusinessOpsTask(
@@ -58,6 +72,7 @@ def _create_integration_task(session_uuid: str, title: str, integration: str) ->
             owner="CareFusion Telemed",
             priority="Normal",
             task_metadata={"session_uuid": session_uuid, "integration": integration},
+            org_id=org_id,
         )
         db.add(task)
         db.commit()
@@ -73,54 +88,133 @@ def _create_integration_task(session_uuid: str, title: str, integration: str) ->
 @router.post("/sessions", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)
 def create_session(
     payload: SessionCreate,
+    request: Request,
     db: Session = Depends(get_telehealth_db),
-    _user=Depends(require_roles(UserRole.admin, UserRole.provider)),
+    primary_db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
 ):
     session = TelehealthSession(
+        org_id=user.org_id,
         session_uuid=str(uuid4()),
         title=payload.title,
         host_name=payload.host_name,
         access_code=str(secrets.randbelow(900000) + 100000),
         session_secret=secrets.token_hex(16),
     )
+    apply_training_mode(session, request)
     db.add(session)
     db.commit()
     db.refresh(session)
-    _log_alert(db, session.session_uuid, "Session created")
-    _create_integration_task(session.session_uuid, "Telehealth session created", "carefusion")
-    _create_integration_task(session.session_uuid, "Office Ally sync queued", "office-ally")
+    _log_alert(db, session.session_uuid, "Session created", user.org_id)
+    _create_integration_task(
+        session.session_uuid, "Telehealth session created", "carefusion", user.org_id
+    )
+    _create_integration_task(
+        session.session_uuid, "Office Ally sync queued", "office-ally", user.org_id
+    )
+    if payload.consent_captured:
+        consent = ConsentProvenance(
+            org_id=user.org_id,
+            subject_type="telehealth_session",
+            subject_id=session.session_uuid,
+            policy_hash=payload.policy_hash,
+            context=payload.consent_context,
+            metadata_json={"title": session.title, "host_name": session.host_name},
+            captured_by=user.email,
+            device_id=request.headers.get("x-device-id", "") if request else "",
+        )
+        apply_training_mode(consent, request)
+        primary_db.add(consent)
+        primary_db.commit()
+        audit_and_event(
+            db=primary_db,
+            request=request,
+            user=user,
+            action="create",
+            resource="consent_provenance",
+            classification=consent.classification,
+            after_state=model_snapshot(consent),
+            event_type="RECORD_WRITTEN",
+            event_payload={"consent_id": consent.id},
+        )
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="create",
+        resource="telehealth_session",
+        classification=session.classification,
+        after_state=model_snapshot(session),
+        event_type="RECORD_WRITTEN",
+        event_payload={"session_uuid": session.session_uuid},
+    )
     return session
 
 
 @router.get("/sessions", response_model=list[SessionResponse])
-def list_sessions(db: Session = Depends(get_telehealth_db)):
-    return db.query(TelehealthSession).order_by(TelehealthSession.created_at.desc()).all()
+def list_sessions(
+    request: Request,
+    db: Session = Depends(get_telehealth_db),
+    user: User = Depends(require_roles()),
+):
+    return scoped_query(
+        db, TelehealthSession, user.org_id, request.state.training_mode
+    ).order_by(TelehealthSession.created_at.desc()).all()
 
 
 @router.get("/sessions/{session_uuid}", response_model=SessionResponse)
-def get_session(session_uuid: str, db: Session = Depends(get_telehealth_db)):
-    session = db.query(TelehealthSession).filter(TelehealthSession.session_uuid == session_uuid).first()
-    if not session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
-    return session
+def get_session(
+    session_uuid: str,
+    request: Request,
+    db: Session = Depends(get_telehealth_db),
+    user: User = Depends(require_roles()),
+):
+    return get_scoped_record(
+        db,
+        request,
+        TelehealthSession,
+        session_uuid,
+        user,
+        id_field="session_uuid",
+        resource_label="telehealth",
+    )
 
 
 @router.post("/sessions/{session_uuid}/participants", status_code=status.HTTP_201_CREATED)
 def add_participant(
     session_uuid: str,
     payload: ParticipantCreate,
+    request: Request,
     db: Session = Depends(get_telehealth_db),
-    _user=Depends(require_roles(UserRole.admin, UserRole.provider)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
 ):
-    session = db.query(TelehealthSession).filter(TelehealthSession.session_uuid == session_uuid).first()
-    if not session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
-    participant = TelehealthParticipant(
-        session_uuid=session_uuid, name=payload.name, role=payload.role
+    session = get_scoped_record(
+        db,
+        request,
+        TelehealthSession,
+        session_uuid,
+        user,
+        id_field="session_uuid",
+        resource_label="telehealth",
     )
+    participant = TelehealthParticipant(
+        session_uuid=session_uuid, name=payload.name, role=payload.role, org_id=session.org_id
+    )
+    apply_training_mode(participant, request)
     db.add(participant)
     db.commit()
     db.refresh(participant)
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="create",
+        resource="telehealth_participant",
+        classification=participant.classification,
+        after_state=model_snapshot(participant),
+        event_type="RECORD_WRITTEN",
+        event_payload={"participant_id": participant.id},
+    )
     return participant
 
 
@@ -128,25 +222,52 @@ def add_participant(
 def add_message(
     session_uuid: str,
     payload: MessageCreate,
+    request: Request,
     db: Session = Depends(get_telehealth_db),
-    _user=Depends(require_roles(UserRole.admin, UserRole.provider)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
 ):
-    session = db.query(TelehealthSession).filter(TelehealthSession.session_uuid == session_uuid).first()
-    if not session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
-    message = TelehealthMessage(
-        session_uuid=session_uuid, sender=payload.sender, message=payload.message
+    session = get_scoped_record(
+        db,
+        request,
+        TelehealthSession,
+        session_uuid,
+        user,
+        id_field="session_uuid",
+        resource_label="telehealth",
     )
+    message = TelehealthMessage(
+        session_uuid=session_uuid,
+        sender=payload.sender,
+        message=payload.message,
+        org_id=session.org_id,
+    )
+    apply_training_mode(message, request)
     db.add(message)
     db.commit()
     db.refresh(message)
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="create",
+        resource="telehealth_message",
+        classification=message.classification,
+        after_state=model_snapshot(message),
+        event_type="RECORD_WRITTEN",
+        event_payload={"message_id": message.id},
+    )
     return message
 
 
 @router.get("/sessions/{session_uuid}/messages")
-def list_messages(session_uuid: str, db: Session = Depends(get_telehealth_db)):
+def list_messages(
+    session_uuid: str,
+    request: Request,
+    db: Session = Depends(get_telehealth_db),
+    user: User = Depends(require_roles()),
+):
     return (
-        db.query(TelehealthMessage)
+        scoped_query(db, TelehealthMessage, user.org_id, request.state.training_mode)
         .filter(TelehealthMessage.session_uuid == session_uuid)
         .order_by(TelehealthMessage.created_at.asc())
         .all()
@@ -156,39 +277,99 @@ def list_messages(session_uuid: str, db: Session = Depends(get_telehealth_db)):
 @router.post("/sessions/{session_uuid}/start")
 def start_session(
     session_uuid: str,
+    request: Request,
     db: Session = Depends(get_telehealth_db),
-    _user=Depends(require_roles(UserRole.admin, UserRole.provider)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
 ):
-    session = db.query(TelehealthSession).filter(TelehealthSession.session_uuid == session_uuid).first()
-    if not session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    session = get_scoped_record(
+        db,
+        request,
+        TelehealthSession,
+        session_uuid,
+        user,
+        id_field="session_uuid",
+        resource_label="telehealth",
+    )
+    enforce_legal_hold(db, user.org_id, "telehealth_session", session.session_uuid, "update")
+    before = model_snapshot(session)
     session.status = "Live"
     session.started_at = datetime.utcnow()
     db.commit()
-    _log_alert(db, session_uuid, "Session started")
+    _log_alert(db, session_uuid, "Session started", session.org_id)
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="update",
+        resource="telehealth_session",
+        classification=session.classification,
+        before_state=before,
+        after_state=model_snapshot(session),
+        event_type="RECORD_WRITTEN",
+        event_payload={"session_uuid": session.session_uuid, "status": session.status},
+    )
     return {"status": "started", "session_uuid": session_uuid}
 
 
 @router.post("/sessions/{session_uuid}/end")
 def end_session(
     session_uuid: str,
+    request: Request,
     db: Session = Depends(get_telehealth_db),
-    _user=Depends(require_roles(UserRole.admin, UserRole.provider)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
 ):
-    session = db.query(TelehealthSession).filter(TelehealthSession.session_uuid == session_uuid).first()
-    if not session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    session = get_scoped_record(
+        db,
+        request,
+        TelehealthSession,
+        session_uuid,
+        user,
+        id_field="session_uuid",
+        resource_label="telehealth",
+    )
+    enforce_legal_hold(db, user.org_id, "telehealth_session", session.session_uuid, "update")
+    before = model_snapshot(session)
     session.status = "Ended"
     session.ended_at = datetime.utcnow()
     db.commit()
-    _log_alert(db, session_uuid, "Session ended")
-    _create_integration_task(session_uuid, "Telehealth session closed", "carefusion")
-    _create_integration_task(session_uuid, "Office Ally sync queued", "office-ally")
+    _log_alert(db, session_uuid, "Session ended", session.org_id)
+    _create_integration_task(
+        session_uuid, "Telehealth session closed", "carefusion", session.org_id
+    )
+    _create_integration_task(
+        session_uuid, "Office Ally sync queued", "office-ally", session.org_id
+    )
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="update",
+        resource="telehealth_session",
+        classification=session.classification,
+        before_state=before,
+        after_state=model_snapshot(session),
+        event_type="RECORD_WRITTEN",
+        event_payload={"session_uuid": session.session_uuid, "status": session.status},
+    )
     return {"status": "ended", "session_uuid": session_uuid}
 
 
 @router.get("/sessions/{session_uuid}/webrtc")
-def get_webrtc_config(session_uuid: str):
+def get_webrtc_config(
+    session_uuid: str,
+    request: Request,
+    db: Session = Depends(get_telehealth_db),
+    user: User = Depends(require_roles()),
+):
+    session = get_scoped_record(
+        db,
+        request,
+        TelehealthSession,
+        session_uuid,
+        user,
+        id_field="session_uuid",
+        resource_label="telehealth",
+    )
     return {
         "session_uuid": session_uuid,
         "provider": "webrtc",
@@ -200,4 +381,5 @@ def get_webrtc_config(session_uuid: str):
             "recording": True,
             "multi_party": True,
         },
+        "status": session.status,
     }

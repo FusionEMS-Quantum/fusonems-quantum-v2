@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     TELEHEALTH_API_KEY: str = Field("", env="TELEHEALTH_API_KEY")
     OPENID_CLIENT_ID: str = Field("", env="OPENID_CLIENT_ID")
     OPENID_SECRET: str = Field("", env="OPENID_SECRET")
+    FIRE_DATABASE_URL: str = Field("", env="FIRE_DATABASE_URL")
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

@@ -1,16 +1,23 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from core.config import settings
 from core.database import get_db
+from core.guards import require_module
 from core.security import require_roles
 from models.mail import Message
-from models.user import UserRole
+from models.user import User, UserRole
 from utils.logger import logger
+from utils.write_ops import apply_training_mode, audit_and_event, model_snapshot
+from utils.tenancy import scoped_query
 
 
-router = APIRouter(prefix="/api/mail", tags=["Mail"])
+router = APIRouter(
+    prefix="/api/mail",
+    tags=["Mail"],
+    dependencies=[Depends(require_module("COMMS"))],
+)
 
 
 class MessageCreate(BaseModel):
@@ -68,15 +75,17 @@ def _send_telnyx_message(payload: MessageCreate) -> str:
 @router.post("/messages", status_code=status.HTTP_201_CREATED)
 def create_message(
     payload: MessageCreate,
+    request: Request,
     db: Session = Depends(get_db),
-    _user=Depends(require_roles(UserRole.admin, UserRole.dispatcher)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher)),
 ):
     if payload.channel.lower() in {"sms", "fax", "voice", "call"} and not settings.TELNYX_API_KEY:
         raise HTTPException(
             status_code=status.HTTP_412_PRECONDITION_FAILED,
             detail="Telnyx API key not configured",
         )
-    message = Message(**payload.dict(exclude={"media_url"}))
+    message = Message(**payload.dict(exclude={"media_url"}), org_id=user.org_id)
+    apply_training_mode(message, request)
     if payload.channel.lower() in {"sms", "fax", "voice", "call"}:
         try:
             telnyx_id = _send_telnyx_message(payload)
@@ -90,9 +99,26 @@ def create_message(
     db.add(message)
     db.commit()
     db.refresh(message)
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="create",
+        resource="mail_message",
+        classification=message.classification,
+        after_state=model_snapshot(message),
+        event_type="RECORD_WRITTEN",
+        event_payload={"message_id": message.id},
+    )
     return message
 
 
 @router.get("/messages")
-def list_messages(db: Session = Depends(get_db)):
-    return db.query(Message).order_by(Message.created_at.desc()).all()
+def list_messages(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles()),
+):
+    return scoped_query(db, Message, user.org_id, request.state.training_mode).order_by(
+        Message.created_at.desc()
+    ).all()

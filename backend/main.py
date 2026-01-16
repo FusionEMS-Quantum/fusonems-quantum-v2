@@ -1,8 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
-from core.database import Base, TelehealthBase, engine, telehealth_engine
+from sqlalchemy import text
+
+from core.database import Base, FireBase, HemsBase, TelehealthBase, engine, fire_engine, hems_engine, telehealth_engine
 from utils.logger import logger
+from utils.time import compute_drift_seconds, parse_device_time, utc_now
 from models import (
     AiInsight,
     BillingRecord,
@@ -29,12 +32,41 @@ from services.founder.founder_router import router as founder_router
 from services.investor_demo.investor_demo_router import router as investor_demo_router
 from services.mail.mail_router import router as mail_router
 from services.lob_webhook import router as lob_router
+from services.fire.fire_router import router as fire_router
 from services.telehealth.telehealth_router import router as telehealth_router
 from services.schedule.schedule_router import router as schedule_router
+from services.system.system_router import router as system_router
 from services.automation.automation_router import router as automation_router
 from services.validation.validation_router import router as validation_router
+from services.events.event_router import router as event_router
+from services.time.time_router import router as time_router
+from services.workflows.workflow_router import router as workflow_router
+from services.legal.legal_router import router as legal_router
+from services.ai_registry.ai_registry_router import router as ai_registry_router
+from services.consent.consent_router import router as consent_router
+from services.training.training_router import router as training_router
+from services.hems.hems_router import router as hems_router
+from services.repair.repair_router import router as repair_router
+from services.export.export_router import router as export_router
+from services.events.event_handlers import register_event_handlers
 
 app = FastAPI(title="FusonEMS Quantum Platform", version="2.0")
+
+
+@app.middleware("http")
+async def server_time_middleware(request: Request, call_next):
+    server_time = utc_now()
+    device_time = parse_device_time(request.headers.get("x-device-time"))
+    drift_seconds, drifted = compute_drift_seconds(device_time, server_time)
+    request.state.server_time = server_time
+    request.state.device_time = device_time
+    request.state.drift_seconds = drift_seconds
+    request.state.drifted = drifted
+    response = await call_next(request)
+    response.headers["x-server-time"] = server_time.isoformat()
+    response.headers["x-drift-seconds"] = str(drift_seconds)
+    response.headers["x-drifted"] = str(drifted).lower()
+    return response
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[origin.strip() for origin in settings.ALLOWED_ORIGINS.split(",")],
@@ -46,6 +78,7 @@ app.include_router(cad_router)
 app.include_router(tracking_router)
 app.include_router(epcr_router)
 app.include_router(schedule_router)
+app.include_router(system_router)
 app.include_router(billing_router)
 app.include_router(mail_router)
 app.include_router(lob_router)
@@ -53,6 +86,17 @@ app.include_router(telehealth_router)
 app.include_router(automation_router)
 app.include_router(validation_router)
 app.include_router(compliance_router)
+app.include_router(fire_router)
+app.include_router(event_router)
+app.include_router(time_router)
+app.include_router(workflow_router)
+app.include_router(legal_router)
+app.include_router(ai_registry_router)
+app.include_router(consent_router)
+app.include_router(training_router)
+app.include_router(hems_router)
+app.include_router(repair_router)
+app.include_router(export_router)
 app.include_router(ai_console_router)
 app.include_router(founder_router)
 app.include_router(investor_demo_router)
@@ -62,6 +106,7 @@ app.include_router(business_ops_router)
 
 @app.on_event("startup")
 def startup() -> None:
+    register_event_handlers()
     try:
         Base.metadata.create_all(bind=engine)
     except Exception as exc:
@@ -70,6 +115,17 @@ def startup() -> None:
         TelehealthBase.metadata.create_all(bind=telehealth_engine)
     except Exception as exc:
         logger.warning("Telehealth DB initialization failed: %s", exc)
+    try:
+        FireBase.metadata.create_all(bind=fire_engine)
+    except Exception as exc:
+        logger.warning("Fire DB initialization failed: %s", exc)
+    try:
+        if not settings.DATABASE_URL.startswith("sqlite"):
+            with hems_engine.begin() as connection:
+                connection.execute(text("CREATE SCHEMA IF NOT EXISTS hems"))
+        HemsBase.metadata.create_all(bind=hems_engine)
+    except Exception as exc:
+        logger.warning("HEMS DB initialization failed: %s", exc)
 
 @app.get("/")
 def root():

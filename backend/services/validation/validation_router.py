@@ -1,13 +1,20 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from core.database import get_db
+from core.guards import require_module
 from core.security import require_roles
-from models.user import UserRole
+from models.user import User, UserRole
 from models.validation import DataValidationIssue
+from utils.tenancy import scoped_query
+from utils.write_ops import apply_training_mode, audit_and_event, model_snapshot
 
-router = APIRouter(prefix="/api/validation", tags=["Validation"])
+router = APIRouter(
+    prefix="/api/validation",
+    tags=["Validation"],
+    dependencies=[Depends(require_module("VALIDATION"))],
+)
 
 
 class ValidationScan(BaseModel):
@@ -23,8 +30,9 @@ class ValidationScan(BaseModel):
 @router.post("/scan", status_code=status.HTTP_201_CREATED)
 def scan_payload(
     payload: ValidationScan,
+    request: Request,
     db: Session = Depends(get_db),
-    _user=Depends(require_roles(UserRole.admin, UserRole.dispatcher, UserRole.provider)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher, UserRole.provider)),
 ):
     issues = []
     if not payload.patient_name:
@@ -41,18 +49,38 @@ def scan_payload(
     stored = []
     for issue in issues:
         record = DataValidationIssue(
+            org_id=user.org_id,
             entity_type=payload.entity_type,
             entity_id=payload.entity_id,
             severity="High" if "Missing" in issue else "Medium",
             issue=issue,
         )
+        apply_training_mode(record, request)
         db.add(record)
         stored.append(record)
 
     db.commit()
+    for record in stored:
+        audit_and_event(
+            db=db,
+            request=request,
+            user=user,
+            action="create",
+            resource="validation_issue",
+            classification=record.classification,
+            after_state=model_snapshot(record),
+            event_type="RECORD_WRITTEN",
+            event_payload={"issue_id": record.id},
+        )
     return {"issues": issues, "count": len(issues)}
 
 
 @router.get("/issues")
-def list_issues(db: Session = Depends(get_db)):
-    return db.query(DataValidationIssue).order_by(DataValidationIssue.created_at.desc()).all()
+def list_issues(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles()),
+):
+    return scoped_query(
+        db, DataValidationIssue, user.org_id, request.state.training_mode
+    ).order_by(DataValidationIssue.created_at.desc()).all()
