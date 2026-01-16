@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request
+from urllib.parse import urlparse
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
@@ -170,6 +171,11 @@ app.include_router(business_ops_router)
 @app.on_event("startup")
 def startup() -> None:
     register_event_handlers()
+    try:
+        db_host = urlparse(settings.DATABASE_URL).hostname or "unknown"
+    except Exception:
+        db_host = "unknown"
+    logger.info("DATABASE_URL host: %s", db_host)
     try:
         Base.metadata.create_all(bind=engine)
     except Exception as exc:
