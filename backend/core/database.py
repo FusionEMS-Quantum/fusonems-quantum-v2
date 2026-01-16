@@ -10,17 +10,26 @@ def _connect_args(database_url: str) -> dict:
     return {}
 
 
+def _resolve_database_url(database_url: str) -> str:
+    if database_url:
+        return database_url
+    return "sqlite:///./runtime.db"
+
+
+database_url = _resolve_database_url(settings.DATABASE_URL)
 engine = create_engine(
-    settings.DATABASE_URL,
+    database_url,
     pool_pre_ping=True,
     pool_size=settings.DB_POOL_SIZE,
     max_overflow=settings.DB_MAX_OVERFLOW,
-    connect_args=_connect_args(settings.DATABASE_URL),
+    connect_args=_connect_args(database_url),
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-telehealth_database_url = settings.TELEHEALTH_DATABASE_URL or settings.DATABASE_URL
+telehealth_database_url = _resolve_database_url(
+    settings.TELEHEALTH_DATABASE_URL or settings.DATABASE_URL
+)
 telehealth_engine = create_engine(
     telehealth_database_url,
     pool_pre_ping=True,
@@ -33,7 +42,9 @@ TelehealthSessionLocal = sessionmaker(
 )
 TelehealthBase = declarative_base()
 
-fire_database_url = settings.FIRE_DATABASE_URL or settings.DATABASE_URL
+fire_database_url = _resolve_database_url(
+    settings.FIRE_DATABASE_URL or settings.DATABASE_URL
+)
 fire_engine = create_engine(
     fire_database_url,
     pool_pre_ping=True,
@@ -44,12 +55,13 @@ fire_engine = create_engine(
 FireSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=fire_engine)
 FireBase = declarative_base()
 
+hems_database_url = _resolve_database_url(settings.DATABASE_URL)
 hems_engine = create_engine(
-    settings.DATABASE_URL,
+    hems_database_url,
     pool_pre_ping=True,
     pool_size=settings.DB_POOL_SIZE,
     max_overflow=settings.DB_MAX_OVERFLOW,
-    connect_args=_connect_args(settings.DATABASE_URL),
+    connect_args=_connect_args(hems_database_url),
 )
 HemsSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=hems_engine)
 HemsBase = declarative_base()
