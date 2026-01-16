@@ -9,17 +9,21 @@ export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState(location.state?.error ?? '')
 
   const handleSubmit = async (event) => {
     event.preventDefault()
     if (!email || !password) {
       return
     }
+    setError('')
     setIsSubmitting(true)
     try {
       const destination = await loginLocal({ email, password })
       const redirect = location.state?.from || destination
       navigate(redirect, { replace: true })
+    } catch (err) {
+      setError('Action needed: login failed. Verify credentials or unlock your agency key.')
     } finally {
       setIsSubmitting(false)
     }
@@ -27,14 +31,34 @@ export default function Login() {
 
   return (
     <div className="auth-shell">
+      <section className="auth-hero">
+        <div className="hero-logo">
+          <img src="/brand/fusionems-quantum.png" alt="FusionEMS Quantum" />
+        </div>
+        <div>
+          <p className="eyebrow">Secure Access</p>
+          <h1>FusionEMS Quantum Command Gate</h1>
+          <p className="hero-text">
+            Authoritative entry into FusionEMS Quantum. This surface is the only authorized route
+            into the command center—no dashboards, no telemetry, just decisive access.
+          </p>
+        </div>
+      </section>
+
       <div className="panel auth-panel">
-        <h2>Sign in to FusionEMS Quantum</h2>
-        <p className="list-sub">Secure access to the command center and role-specific modules.</p>
-        {oidcEnabled ? (
-          <button className="primary-button" type="button" onClick={loginOIDC}>
-            Sign in with Organization
-          </button>
+        {error ? (
+          <div className="alert alert-danger">
+            <p>{error}</p>
+            <button type="button" className="alert-dismiss" onClick={() => setError('')}>
+              DISMISS
+            </button>
+          </div>
         ) : null}
+        <h2>Sign in to FusionEMS Quantum</h2>
+        <p className="list-sub">
+          Secure access for dispatchers, clinicians, and leadership to the grounded command gate.
+        </p>
+
         {localAuthEnabled ? (
           <form className="form-grid" onSubmit={handleSubmit}>
             <label className="field">
@@ -58,12 +82,19 @@ export default function Login() {
               />
             </label>
             <button className="primary-button" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Signing in...' : 'Sign In'}
+              {isSubmitting ? 'Signing in...' : 'Sign In to Command'}
             </button>
           </form>
         ) : (
           <p className="list-sub">Local sign-in is disabled. Use organization login.</p>
         )}
+
+        {oidcEnabled ? (
+          <button className="ghost-button" type="button" onClick={loginOIDC}>
+            Sign in with Organization
+          </button>
+        ) : null}
+
         {localAuthEnabled ? (
           <p className="auth-footer">
             New agency? <Link to="/register">Create an account</Link>
