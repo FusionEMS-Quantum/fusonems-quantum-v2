@@ -99,10 +99,6 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
-def _is_truthy(val: Optional[bool]) -> bool:
-    return bool(val)
-
-
 def validate_settings_runtime(settings: Settings) -> None:
     errors: list[str] = []
     env = getattr(settings, "ENV", "development")
