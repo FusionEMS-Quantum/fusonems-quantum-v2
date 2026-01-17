@@ -1,6 +1,9 @@
 from typing import Optional
 from pydantic_settings import BaseSettings
 from pydantic import Field
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -157,4 +160,4 @@ def validate_settings_runtime(settings: Settings) -> None:
 
     if errors and env != "production":
         warning_text = "\n".join(f"- {e}" for e in errors)
-        print("Configuration validation warnings (non-production):\n" + warning_text)
+        logger.warning("Configuration validation warnings (non-production):\n" + warning_text)

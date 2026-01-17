@@ -1,8 +1,11 @@
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import QueuePool
+import logging
 
 from core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def _connect_args(database_url: str) -> dict:
@@ -47,7 +50,7 @@ def _create_hardened_engine(database_url: str):
         if settings.ENV == "production":
             raise RuntimeError(f"Database connectivity test failed: {e}")
         else:
-            print(f"Database connectivity warning: {e}")
+            logger.warning(f"Database connectivity warning: {e}")
     
     return engine
 
