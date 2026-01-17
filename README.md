@@ -66,6 +66,15 @@ cp .env.template backend/.env
 
 Set `VITE_API_URL` in `frontend/.env` (or your hosting platform) for API integration.
 
+### Database Connection Pooling
+The platform supports tunable database connection pooling for optimal performance and resource management. Key environment variables include:
+- `DB_POOL_SIZE`: Maximum permanent connections (default: 5)
+- `DB_MAX_OVERFLOW`: Additional on-demand connections (default: 10)
+- `DB_POOL_TIMEOUT`: Connection acquisition timeout in seconds (default: 30)
+- `DB_POOL_RECYCLE`: Connection recycle interval in seconds (default: 1800)
+
+For detailed information on pooling configuration and deployment tier recommendations, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Tests
 ### Backend
 ```bash
