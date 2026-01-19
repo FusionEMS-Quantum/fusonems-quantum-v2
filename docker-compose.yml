@@ -19,6 +19,12 @@ services:
       DATABASE_URL: postgresql://admin:securepass@db:5432/fusonems
       ALLOWED_ORIGINS: http://localhost:5173
       JWT_SECRET_KEY: change-me
+      DB_POOL_SIZE: 5
+      DB_MAX_OVERFLOW: 10
+      DB_POOL_RECYCLE: 3600
+      DB_POOL_TIMEOUT: 30
+      DB_POOL_PRE_PING: true
+      DB_ECHO_POOL: false
     ports:
       - "8000:8080"
     depends_on:

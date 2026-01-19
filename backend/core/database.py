@@ -19,9 +19,12 @@ def _resolve_database_url(database_url: str) -> str:
 database_url = _resolve_database_url(settings.DATABASE_URL)
 engine = create_engine(
     database_url,
-    pool_pre_ping=True,
+    pool_pre_ping=settings.DB_POOL_PRE_PING,
     pool_size=settings.DB_POOL_SIZE,
     max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_recycle=settings.DB_POOL_RECYCLE,
+    pool_timeout=settings.DB_POOL_TIMEOUT,
+    echo_pool=settings.DB_ECHO_POOL,
     connect_args=_connect_args(database_url),
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -32,9 +35,12 @@ telehealth_database_url = _resolve_database_url(
 )
 telehealth_engine = create_engine(
     telehealth_database_url,
-    pool_pre_ping=True,
+    pool_pre_ping=settings.DB_POOL_PRE_PING,
     pool_size=settings.DB_POOL_SIZE,
     max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_recycle=settings.DB_POOL_RECYCLE,
+    pool_timeout=settings.DB_POOL_TIMEOUT,
+    echo_pool=settings.DB_ECHO_POOL,
     connect_args=_connect_args(telehealth_database_url),
 )
 TelehealthSessionLocal = sessionmaker(
@@ -47,9 +53,12 @@ fire_database_url = _resolve_database_url(
 )
 fire_engine = create_engine(
     fire_database_url,
-    pool_pre_ping=True,
+    pool_pre_ping=settings.DB_POOL_PRE_PING,
     pool_size=settings.DB_POOL_SIZE,
     max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_recycle=settings.DB_POOL_RECYCLE,
+    pool_timeout=settings.DB_POOL_TIMEOUT,
+    echo_pool=settings.DB_ECHO_POOL,
     connect_args=_connect_args(fire_database_url),
 )
 FireSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=fire_engine)
@@ -58,9 +67,12 @@ FireBase = declarative_base()
 hems_database_url = _resolve_database_url(settings.DATABASE_URL)
 hems_engine = create_engine(
     hems_database_url,
-    pool_pre_ping=True,
+    pool_pre_ping=settings.DB_POOL_PRE_PING,
     pool_size=settings.DB_POOL_SIZE,
     max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_recycle=settings.DB_POOL_RECYCLE,
+    pool_timeout=settings.DB_POOL_TIMEOUT,
+    echo_pool=settings.DB_ECHO_POOL,
     connect_args=_connect_args(hems_database_url),
 )
 HemsSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=hems_engine)
