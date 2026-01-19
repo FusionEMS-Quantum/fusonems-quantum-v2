@@ -1,0 +1,109 @@
+.access-bg {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #232526 0%, #414345 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.access-gateway {
+  background: rgba(30, 32, 36, 0.85);
+  border-radius: 2rem;
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+  padding: 3rem 2rem;
+  max-width: 700px;
+  width: 100%;
+  text-align: center;
+  backdrop-filter: blur(8px);
+  animation: fadeIn 0.7s cubic-bezier(0.4,0,0.2,1);
+}
+.access-title {
+  color: #fff;
+  font-size: 2.2rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+.access-desc {
+  color: #b0b3b8;
+  margin-bottom: 2rem;
+}
+.access-cards {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.access-card {
+  background: rgba(255,255,255,0.08);
+  border-radius: 1.2rem;
+  box-shadow: 0 2px 12px 0 rgba(0,0,0,0.12);
+  padding: 2rem 1.2rem 1.5rem 1.2rem;
+  min-width: 180px;
+  max-width: 220px;
+  flex: 1 1 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  transition: transform 0.18s, box-shadow 0.18s;
+  border: 1.5px solid transparent;
+  position: relative;
+  animation: cardPop 0.7s cubic-bezier(0.4,0,0.2,1);
+}
+.access-card:focus, .access-card:hover {
+  transform: translateY(-6px) scale(1.04);
+  box-shadow: 0 6px 24px 0 rgba(31, 38, 135, 0.25);
+  border-color: #4f8cff;
+  outline: none;
+}
+.access-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.7rem;
+  color: #fff;
+}
+.access-card-summary {
+  color: #d1d5db;
+  font-size: 0.98rem;
+  margin-bottom: 1.2rem;
+  min-height: 48px;
+}
+.access-card-cta {
+  background: #4f8cff;
+  color: #fff;
+  border: none;
+  border-radius: 0.7rem;
+  padding: 0.5rem 1.2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 4px 0 rgba(0,0,0,0.10);
+  transition: background 0.18s;
+}
+.access-card-cta:hover {
+  background: #2563eb;
+}
+/* Founder card subdued */
+.access-card.founder {
+  background: rgba(80,80,80,0.13);
+  border: 1.5px solid #444;
+  filter: grayscale(0.25) brightness(0.92);
+  opacity: 0.85;
+}
+/* Pilot card aviation icon */
+.pilot-icon {
+  font-size: 1.3rem;
+  margin-right: 0.2rem;
+  filter: drop-shadow(0 0 2px #4f8cff);
+}
+/* Subtle motion */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes cardPop {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
