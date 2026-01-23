@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     DOCS_S3_SECRET_KEY: str = Field("", env="DOCS_S3_SECRET_KEY")
     DOCS_ENCRYPTION_KEY: str = Field("change-me", env="DOCS_ENCRYPTION_KEY")
     TELEHEALTH_DATABASE_URL: str = Field("", env="TELEHEALTH_DATABASE_URL")
+    HEMS_DATABASE_URL: str = Field("", env="HEMS_DATABASE_URL")
     TELEHEALTH_API_KEY: str = Field("", env="TELEHEALTH_API_KEY")
     OPENID_CLIENT_ID: str = Field("", env="OPENID_CLIENT_ID")
     OPENID_SECRET: str = Field("", env="OPENID_SECRET")
