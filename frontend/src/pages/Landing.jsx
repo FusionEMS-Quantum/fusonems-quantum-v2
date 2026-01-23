@@ -1,14 +1,18 @@
 import React, { Suspense, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 
 /* =========================
    Metadata + Analytics
    ========================= */
 function useLandingMetadata() {
   useEffect(() => {
-    document.title = 'FusionEMS Quantum | Regulated EMS Platform'
-
+    const title = 'FusionEMS Quantum | Regulated EMS Platform'
     const description =
       'The regulated, audit-defensible EMS operating system for agencies, hospitals, and compliance-driven partners.'
+    const url = 'https://fusionems.com/'
+
+    document.title = title
+
     let metaDescription = document.querySelector('meta[name="description"]')
     if (!metaDescription) {
       metaDescription = document.createElement('meta')
@@ -16,6 +20,23 @@ function useLandingMetadata() {
       document.head.appendChild(metaDescription)
     }
     metaDescription.setAttribute('content', description)
+
+    const openGraphTags = [
+      { property: 'og:title', content: title },
+      { property: 'og:description', content: description },
+      { property: 'og:url', content: url },
+      { property: 'og:type', content: 'website' },
+    ]
+
+    openGraphTags.forEach(({ property, content }) => {
+      let tag = document.querySelector(`meta[property="${property}"]`)
+      if (!tag) {
+        tag = document.createElement('meta')
+        tag.setAttribute('property', property)
+        document.head.appendChild(tag)
+      }
+      tag.setAttribute('content', content)
+    })
 
     const scriptId = 'plausible-script'
     if (!document.getElementById(scriptId)) {
@@ -112,56 +133,63 @@ function MainContent() {
         </p>
 
         <div className="mt-4 flex w-full flex-col gap-4 md:flex-row">
-          <button
+          <Link
             className="flex-1 rounded-full bg-[var(--orange)] px-6 py-4 text-lg font-bold text-black"
-            type="button"
+            to="/provider-portal"
+            role="button"
           >
             Request Medical Transport
-          </button>
+          </Link>
 
-          <button
+          <Link
             className="flex-1 rounded-full border border-[var(--orange)] bg-black/20 px-6 py-4 text-lg font-semibold text-[var(--orange)]"
-            type="button"
+            to="/login"
+            role="button"
           >
             Access Platform
-          </button>
+          </Link>
 
-          <button
+          <Link
             className="flex-1 rounded-full border border-white/10 bg-black/20 px-6 py-4 text-lg font-semibold text-white"
-            type="button"
+            to="/patient-portal"
+            role="button"
           >
             Pay My Medical Transport Bill
-          </button>
+          </Link>
         </div>
 
         <div className="mt-2 flex w-full flex-col gap-4 md:flex-row">
-          <button
+          <Link
             className="flex-1 rounded-full border border-white/10 bg-black/20 px-5 py-3 text-base font-semibold text-white"
-            type="button"
+            to="/telehealth"
+            role="button"
           >
             CareFusion Telehealth
-          </button>
+          </Link>
 
-          <button
+          <Link
             className="flex-1 rounded-full border border-white/10 bg-black/20 px-5 py-3 text-base font-semibold text-white"
-            type="button"
+            to="/dashboard"
+            role="button"
           >
             MedicOS App Platform
-          </button>
+          </Link>
 
-          <button
+          <Link
             className="flex-1 rounded-full border border-white/10 bg-black/20 px-5 py-3 text-base font-semibold text-white"
-            type="button"
+            to="/reporting"
+            role="button"
           >
             Compliance &amp; Legal Readiness
-          </button>
+          </Link>
 
-          <button
+          <Link
             className="flex-1 rounded-full border border-white/10 bg-black/20 px-5 py-3 text-base font-semibold text-white"
-            type="button"
+            to="/register"
+            role="button"
           >
             Request Demo / Contact
-          </button>
+          </Link>
         </div>
       </section>
 
