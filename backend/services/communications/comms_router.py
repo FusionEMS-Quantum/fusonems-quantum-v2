@@ -22,6 +22,7 @@ from models.communications import (
     CommsRingGroup,
     CommsRoutingPolicy,
     CommsTask,
+    CommsTemplate,
     CommsThread,
     CommsTranscript,
     CommsVoicemail,
@@ -328,6 +329,47 @@ class MessageCreate(BaseModel):
     tags: list[str] = []
 
 
+class OutboundCommsCreate(BaseModel):
+    thread_id: Optional[int] = None
+    subject: str = ""
+    sender: str
+    recipients: list[str] = []
+    body: str
+    media_url: str = ""
+    linked_resource: str = ""
+    priority: str = "Normal"
+    classification: str = "PHI"
+
+
+class VoiceCallCreate(BaseModel):
+    caller: str
+    recipient: str
+    direction: str = "outbound"
+    linked_object_type: str = ""
+    linked_object_id: str = ""
+    classification: str = "ops"
+    payload: dict = {}
+    thread_id: Optional[int] = None
+
+
+class TemplateCreate(BaseModel):
+    name: str
+    channel: str = "sms"
+    subject: str = ""
+    body: str
+    tags: list[str] = []
+    is_active: bool = True
+
+
+class TemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    channel: Optional[str] = None
+    subject: Optional[str] = None
+    body: Optional[str] = None
+    tags: Optional[list[str]] = None
+    is_active: Optional[bool] = None
+
+
 class CallLogCreate(BaseModel):
     caller: str
     recipient: str
@@ -399,6 +441,48 @@ class CallLinkCreate(BaseModel):
     linked_object_type: str
     linked_object_id: str
     classification: str = "ops"
+
+
+def _get_or_create_thread(
+    payload: OutboundCommsCreate,
+    channel: str,
+    request: Request,
+    db: Session,
+    user: User,
+) -> CommsThread:
+    if payload.thread_id:
+        thread = (
+            scoped_query(db, CommsThread, user.org_id, request.state.training_mode)
+            .filter(CommsThread.id == payload.thread_id)
+            .first()
+        )
+        if not thread:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Thread not found")
+        return thread
+    thread = CommsThread(
+        org_id=user.org_id,
+        channel=channel,
+        subject=payload.subject,
+        priority=payload.priority,
+        linked_resource=payload.linked_resource,
+        participants=list({payload.sender, *payload.recipients}),
+    )
+    apply_training_mode(thread, request)
+    db.add(thread)
+    db.commit()
+    db.refresh(thread)
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="create",
+        resource="comms_thread",
+        classification=payload.classification,
+        after_state=model_snapshot(thread),
+        event_type="comms.thread.created",
+        event_payload={"thread_id": thread.id, "channel": channel},
+    )
+    return thread
 
 
 @router.get("/threads")
@@ -488,6 +572,106 @@ def create_message(
         event_payload={"message_id": message.id, "thread_id": thread.id},
     )
     return model_snapshot(message)
+
+
+def _create_outbound_message(
+    payload: OutboundCommsCreate,
+    channel: str,
+    request: Request,
+    db: Session,
+    user: User,
+) -> dict:
+    thread = _get_or_create_thread(payload, channel, request, db, user)
+    message = CommsMessage(
+        org_id=user.org_id,
+        thread_id=thread.id,
+        sender=payload.sender,
+        body=payload.body,
+        media_url=payload.media_url,
+        tags=payload.recipients,
+    )
+    apply_training_mode(message, request)
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="create",
+        resource="comms_message",
+        classification=payload.classification,
+        after_state=model_snapshot(message),
+        event_type=f"comms.{channel}.sent",
+        event_payload={"message_id": message.id, "thread_id": thread.id},
+    )
+    return model_snapshot(message)
+
+
+@router.post("/email", status_code=status.HTTP_201_CREATED)
+def send_email(
+    payload: OutboundCommsCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher, UserRole.founder)),
+):
+    return _create_outbound_message(payload, "email", request, db, user)
+
+
+@router.post("/sms", status_code=status.HTTP_201_CREATED)
+def send_sms(
+    payload: OutboundCommsCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher, UserRole.founder)),
+):
+    return _create_outbound_message(payload, "sms", request, db, user)
+
+
+@router.post("/fax", status_code=status.HTTP_201_CREATED)
+def send_fax(
+    payload: OutboundCommsCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher, UserRole.founder)),
+):
+    return _create_outbound_message(payload, "fax", request, db, user)
+
+
+@router.post("/voice", status_code=status.HTTP_201_CREATED)
+def send_voice(
+    payload: VoiceCallCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher, UserRole.founder)),
+):
+    call_log = CommsCallLog(
+        org_id=user.org_id,
+        caller=payload.caller,
+        recipient=payload.recipient,
+        direction=payload.direction,
+        linked_object_type=payload.linked_object_type,
+        linked_object_id=payload.linked_object_id,
+        classification=payload.classification,
+        payload=payload.payload,
+        thread_id=payload.thread_id,
+    )
+    apply_training_mode(call_log, request)
+    db.add(call_log)
+    db.commit()
+    db.refresh(call_log)
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="create",
+        resource="comms_call",
+        classification=payload.classification,
+        after_state=model_snapshot(call_log),
+        event_type="comms.voice.logged",
+        event_payload={"call_id": call_log.id},
+    )
+    return model_snapshot(call_log)
 
 
 @router.get("/calls")
@@ -1035,6 +1219,78 @@ def create_broadcast(
     return model_snapshot(broadcast)
 
 
+@router.get("/templates")
+def list_templates(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher, UserRole.founder)),
+):
+    return scoped_query(db, CommsTemplate, user.org_id, request.state.training_mode).order_by(
+        CommsTemplate.created_at.desc()
+    )
+
+
+@router.post("/templates", status_code=status.HTTP_201_CREATED)
+def create_template(
+    payload: TemplateCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher, UserRole.founder)),
+):
+    template = CommsTemplate(org_id=user.org_id, **payload.dict())
+    apply_training_mode(template, request)
+    db.add(template)
+    db.commit()
+    db.refresh(template)
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="create",
+        resource="comms_template",
+        classification="NON_PHI",
+        after_state=model_snapshot(template),
+        event_type="comms.template.created",
+        event_payload={"template_id": template.id},
+    )
+    return model_snapshot(template)
+
+
+@router.put("/templates/{template_id}")
+def update_template(
+    template_id: int,
+    payload: TemplateUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher, UserRole.founder)),
+):
+    template = (
+        scoped_query(db, CommsTemplate, user.org_id, request.state.training_mode)
+        .filter(CommsTemplate.id == template_id)
+        .first()
+    )
+    if not template:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+    before = model_snapshot(template)
+    update_data = payload.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(template, key, value)
+    db.commit()
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="update",
+        resource="comms_template",
+        classification="NON_PHI",
+        before_state=before,
+        after_state=model_snapshot(template),
+        event_type="comms.template.updated",
+        event_payload={"template_id": template.id},
+    )
+    return model_snapshot(template)
+
+
 @router.get("/tasks")
 def list_tasks(
     request: Request,
@@ -1070,3 +1326,22 @@ def create_task(
         event_payload={"task_id": task.id},
     )
     return model_snapshot(task)
+
+
+@router.get("/queue")
+def list_queue(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher, UserRole.founder)),
+):
+    return list_tasks(request=request, db=db, user=user)
+
+
+@router.post("/queue", status_code=status.HTTP_201_CREATED)
+def create_queue_task(
+    payload: TaskCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher, UserRole.founder)),
+):
+    return create_task(payload=payload, request=request, db=db, user=user)

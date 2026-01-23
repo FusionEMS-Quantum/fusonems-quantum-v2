@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import SectionHeader from '../components/SectionHeader.jsx'
 import DataTable from '../components/DataTable.jsx'
 import { apiFetch } from '../services/api.js'
-import { fallbackDocumentExports, fallbackDocumentFiles } from '../data/fallback.js'
 
 const fileColumns = [
   { key: 'filename', label: 'File' },
@@ -17,8 +16,8 @@ const exportColumns = [
 ]
 
 export default function FounderWorkspaceDocuments() {
-  const [files, setFiles] = useState(fallbackDocumentFiles)
-  const [exports, setExports] = useState(fallbackDocumentExports)
+  const [files, setFiles] = useState([])
+  const [exports, setExports] = useState([])
 
   useEffect(() => {
     const load = async () => {
@@ -27,14 +26,14 @@ export default function FounderWorkspaceDocuments() {
           apiFetch('/api/documents/files'),
           apiFetch('/api/documents/exports/history'),
         ])
-        if (Array.isArray(fileData) && fileData.length > 0) {
+        if (Array.isArray(fileData)) {
           setFiles(fileData)
         }
-        if (Array.isArray(exportData) && exportData.length > 0) {
+        if (Array.isArray(exportData)) {
           setExports(exportData)
         }
       } catch (error) {
-        // fallback remains
+        console.warn('Workspace document data unavailable', error)
       }
     }
     load()

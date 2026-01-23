@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import SectionHeader from '../components/SectionHeader.jsx'
 import DataTable from '../components/DataTable.jsx'
 import { apiFetch } from '../services/api.js'
-import { fallbackVoiceNumbers, fallbackVoicePolicies } from '../data/fallback.js'
 
 const numberColumns = [
   { key: 'e164', label: 'Number' },
@@ -16,8 +15,8 @@ const policyColumns = [
 ]
 
 export default function FounderWorkspaceVoice() {
-  const [numbers, setNumbers] = useState(fallbackVoiceNumbers)
-  const [policies, setPolicies] = useState(fallbackVoicePolicies)
+  const [numbers, setNumbers] = useState([])
+  const [policies, setPolicies] = useState([])
 
   useEffect(() => {
     const load = async () => {
@@ -26,14 +25,14 @@ export default function FounderWorkspaceVoice() {
           apiFetch('/api/comms/phone-numbers'),
           apiFetch('/api/comms/routing-policies'),
         ])
-        if (Array.isArray(numberData) && numberData.length > 0) {
+        if (Array.isArray(numberData)) {
           setNumbers(numberData)
         }
-        if (Array.isArray(policyData) && policyData.length > 0) {
+        if (Array.isArray(policyData)) {
           setPolicies(policyData)
         }
       } catch (error) {
-        // fallback remains
+        console.warn('Voice governance data unavailable', error)
       }
     }
     load()

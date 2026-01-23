@@ -21,6 +21,10 @@ from models.user import User, UserRole
 from services.core.audit_router import router as audit_router
 from services.core.auth_router import router as auth_router
 from services.core.settings_router import router as settings_router
+from services.communications.comms_router import router as comms_router
+from services.communications.comms_router import webhook_router as comms_webhook_router
+from services.documents.document_router import router as document_router
+from services.documents.quantum_documents_router import router as quantum_documents_router
 from utils.logger import logger
 from utils.time import compute_drift_seconds, parse_device_time, utc_now
 
@@ -70,6 +74,10 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(audit_router)
 app.include_router(settings_router)
+app.include_router(comms_router)
+app.include_router(comms_webhook_router)
+app.include_router(document_router)
+app.include_router(quantum_documents_router)
 
 
 @app.get("/me")

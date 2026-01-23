@@ -3,26 +3,35 @@ import SectionHeader from '../components/SectionHeader.jsx'
 import DataTable from '../components/DataTable.jsx'
 import AdvisoryPanel from '../components/AdvisoryPanel.jsx'
 import { apiFetch } from '../services/api.js'
-import { fallbackCommsCalls, fallbackCommsMessages, fallbackCommsThreads } from '../data/fallback.js'
 
 export default function Communications() {
-  const [threads, setThreads] = useState(fallbackCommsThreads)
-  const [messages, setMessages] = useState(fallbackCommsMessages)
-  const [calls, setCalls] = useState(fallbackCommsCalls)
+  const [threads, setThreads] = useState([])
+  const [messages, setMessages] = useState([])
+  const [calls, setCalls] = useState([])
+  const [queue, setQueue] = useState([])
+  const [broadcasts, setBroadcasts] = useState([])
+  const [templates, setTemplates] = useState([])
   const [health, setHealth] = useState({
     status: 'unknown',
     configured: false,
     telnyx_number: null,
   })
-  const [timelineId, setTimelineId] = useState(fallbackCommsCalls[0]?.external_call_id || '')
+  const [timelineId, setTimelineId] = useState('')
   const [timeline, setTimeline] = useState([])
-  const [activeThread, setActiveThread] = useState(fallbackCommsThreads[0]?.id || null)
+  const [activeThread, setActiveThread] = useState(null)
   const [formState, setFormState] = useState({
     sender: 'Dispatch',
     body: '',
     media_url: '',
   })
+  const [templateState, setTemplateState] = useState({
+    name: '',
+    channel: 'sms',
+    subject: '',
+    body: '',
+  })
   const [status, setStatus] = useState('')
+  const [templateStatus, setTemplateStatus] = useState('')
 
   const threadColumns = [
     { key: 'subject', label: 'Thread' },
@@ -44,6 +53,25 @@ export default function Communications() {
     { key: 'disposition', label: 'Disposition' },
   ]
 
+  const queueColumns = [
+    { key: 'title', label: 'Task' },
+    { key: 'owner', label: 'Owner' },
+    { key: 'status', label: 'Status' },
+  ]
+
+  const broadcastColumns = [
+    { key: 'title', label: 'Broadcast' },
+    { key: 'status', label: 'Status' },
+    { key: 'target', label: 'Target' },
+  ]
+
+  const templateColumns = [
+    { key: 'name', label: 'Template' },
+    { key: 'channel', label: 'Channel' },
+    { key: 'subject', label: 'Subject' },
+    { key: 'is_active', label: 'Active' },
+  ]
+
   const timelineColumns = [
     { key: 'event_type', label: 'Event' },
     { key: 'provider_event_id', label: 'Provider ID' },
@@ -56,7 +84,10 @@ export default function Communications() {
       if (Array.isArray(data) && data.length > 0) {
         setThreads(data)
         setActiveThread(data[0]?.id || null)
+        return
       }
+      setThreads([])
+      setActiveThread(null)
     } catch (error) {
       console.warn('Threads unavailable', error)
     }
@@ -79,7 +110,12 @@ export default function Communications() {
       const data = await apiFetch('/api/comms/calls')
       if (Array.isArray(data) && data.length > 0) {
         setCalls(data)
+        if (!timelineId && data[0]?.external_call_id) {
+          setTimelineId(data[0].external_call_id)
+        }
+        return
       }
+      setCalls([])
     } catch (error) {
       console.warn('Call logs unavailable', error)
     }
@@ -93,6 +129,39 @@ export default function Communications() {
       }
     } catch (error) {
       console.warn('Comms health unavailable', error)
+    }
+  }
+
+  const loadQueue = async () => {
+    try {
+      const data = await apiFetch('/api/comms/queue')
+      if (Array.isArray(data)) {
+        setQueue(data)
+      }
+    } catch (error) {
+      console.warn('Comms queue unavailable', error)
+    }
+  }
+
+  const loadBroadcasts = async () => {
+    try {
+      const data = await apiFetch('/api/comms/broadcasts')
+      if (Array.isArray(data)) {
+        setBroadcasts(data)
+      }
+    } catch (error) {
+      console.warn('Broadcasts unavailable', error)
+    }
+  }
+
+  const loadTemplates = async () => {
+    try {
+      const data = await apiFetch('/api/comms/templates')
+      if (Array.isArray(data)) {
+        setTemplates(data)
+      }
+    } catch (error) {
+      console.warn('Templates unavailable', error)
     }
   }
 
@@ -114,6 +183,11 @@ export default function Communications() {
   const handleChange = (event) => {
     const { name, value } = event.target
     setFormState((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const handleTemplateChange = (event) => {
+    const { name, value } = event.target
+    setTemplateState((prev) => ({ ...prev, [name]: value }))
   }
 
   const handleSubmit = async (event) => {
@@ -140,10 +214,35 @@ export default function Communications() {
     }
   }
 
+  const handleTemplateSubmit = async (event) => {
+    event.preventDefault()
+    setTemplateStatus('Saving...')
+    try {
+      await apiFetch('/api/comms/templates', {
+        method: 'POST',
+        body: JSON.stringify(templateState),
+      })
+      setTemplateState({
+        name: '',
+        channel: 'sms',
+        subject: '',
+        body: '',
+      })
+      await loadTemplates()
+      setTemplateStatus('Saved')
+    } catch (error) {
+      setTemplateStatus('Failed')
+      console.warn('Template save failed', error)
+    }
+  }
+
   useEffect(() => {
     loadThreads()
     loadCalls()
     loadHealth()
+    loadQueue()
+    loadBroadcasts()
+    loadTemplates()
   }, [])
 
   useEffect(() => {
@@ -205,6 +304,58 @@ export default function Communications() {
             ) : null}
           </div>
         </div>
+      </div>
+
+      <div className="section-grid">
+        <div className="panel">
+          <SectionHeader eyebrow="Queue" title="Retries + Escalations" />
+          <DataTable columns={queueColumns} rows={queue} emptyState="No queued comms tasks." />
+        </div>
+        <div className="panel">
+          <SectionHeader eyebrow="Broadcasts" title="Org-wide Alerts" />
+          <DataTable columns={broadcastColumns} rows={broadcasts} emptyState="No broadcasts yet." />
+        </div>
+      </div>
+
+      <div className="panel">
+        <SectionHeader eyebrow="Templates" title="Message Templates" />
+        <DataTable columns={templateColumns} rows={templates} emptyState="No templates yet." />
+        <form className="form-grid" onSubmit={handleTemplateSubmit}>
+          <div>
+            <label>Name</label>
+            <input name="name" value={templateState.name} onChange={handleTemplateChange} />
+          </div>
+          <div>
+            <label>Channel</label>
+            <select name="channel" value={templateState.channel} onChange={handleTemplateChange}>
+              <option value="sms">SMS</option>
+              <option value="email">Email</option>
+              <option value="fax">Fax</option>
+            </select>
+          </div>
+          <div className="full-width">
+            <label>Subject</label>
+            <input
+              name="subject"
+              value={templateState.subject}
+              onChange={handleTemplateChange}
+            />
+          </div>
+          <div className="full-width">
+            <label>Body</label>
+            <textarea
+              name="body"
+              value={templateState.body}
+              onChange={handleTemplateChange}
+            />
+          </div>
+          <div className="full-width align-end">
+            <button className="primary-button" type="submit">
+              Save Template
+            </button>
+            {templateStatus ? <span className="status-text">{templateStatus}</span> : null}
+          </div>
+        </form>
       </div>
 
       <div className="panel form-panel">

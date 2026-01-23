@@ -1,16 +1,43 @@
+import { useEffect, useState } from 'react'
 import SectionHeader from '../components/SectionHeader.jsx'
 import AdvisoryPanel from '../components/AdvisoryPanel.jsx'
 import StatCard from '../components/StatCard.jsx'
-import { fallbackDocumentExports, fallbackVoiceNumbers } from '../data/fallback.js'
+import { apiFetch } from '../services/api.js'
 
 export default function FounderWorkspace() {
+  const [stats, setStats] = useState({
+    files: 0,
+    voiceNumbers: 0,
+    exports: 0,
+  })
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [files, voiceNumbers, exports] = await Promise.all([
+          apiFetch('/api/documents/files'),
+          apiFetch('/api/comms/phone-numbers'),
+          apiFetch('/api/documents/exports/history'),
+        ])
+        setStats({
+          files: Array.isArray(files) ? files.length : 0,
+          voiceNumbers: Array.isArray(voiceNumbers) ? voiceNumbers.length : 0,
+          exports: Array.isArray(exports) ? exports.length : 0,
+        })
+      } catch (error) {
+        console.warn('Founder workspace stats unavailable', error)
+      }
+    }
+    load()
+  }, [])
+
   return (
     <div className="page">
       <SectionHeader eyebrow="Founder Workspace" title="Quantum Documents + Voice" />
       <div className="grid-3">
-        <StatCard label="Docs Vault" value="Awaiting telemetry" delta="Connect storage" />
-        <StatCard label="Voice Lines" value={`${fallbackVoiceNumbers.length}`} delta="Configured numbers" />
-        <StatCard label="Discovery Exports" value={`${fallbackDocumentExports.length}`} delta="Export history" />
+        <StatCard label="Docs Vault" value={`${stats.files}`} delta="Stored artifacts" />
+        <StatCard label="Voice Lines" value={`${stats.voiceNumbers}`} delta="Configured numbers" />
+        <StatCard label="Discovery Exports" value={`${stats.exports}`} delta="Export history" />
       </div>
       <div className="panel">
         <AdvisoryPanel

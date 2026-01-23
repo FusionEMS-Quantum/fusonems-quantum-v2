@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import SectionHeader from '../components/SectionHeader.jsx'
 import DataTable from '../components/DataTable.jsx'
 import { apiFetch } from '../services/api.js'
-import { fallbackDocumentExports } from '../data/fallback.js'
 
 const exportColumns = [
   { key: 'id', label: 'Export' },
@@ -12,17 +11,17 @@ const exportColumns = [
 ]
 
 export default function FounderWorkspaceExports() {
-  const [exports, setExports] = useState(fallbackDocumentExports)
+  const [exports, setExports] = useState([])
 
   useEffect(() => {
     const load = async () => {
       try {
         const data = await apiFetch('/api/documents/exports/history')
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setExports(data)
         }
       } catch (error) {
-        // fallback remains
+        console.warn('Workspace export history unavailable', error)
       }
     }
     load()
