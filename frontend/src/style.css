@@ -198,6 +198,21 @@ select {
   display: flex;
   flex-direction: column;
   gap: clamp(48px, 6vw, 80px);
+  position: relative;
+  overflow: hidden;
+}
+
+.quantum-home__backdrop {
+  position: absolute;
+  inset: -30% -30% auto -30%;
+  height: 80%;
+  background: radial-gradient(circle at 20% 20%, rgba(255, 106, 0, 0.18), transparent 55%),
+    radial-gradient(circle at 80% 30%, rgba(255, 31, 31, 0.12), transparent 50%),
+    radial-gradient(circle at 50% 80%, rgba(255, 255, 255, 0.08), transparent 60%);
+  opacity: 0.8;
+  filter: blur(10px);
+  animation: drift 14s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .quantum-home__hero {
@@ -211,6 +226,8 @@ select {
   flex-direction: column;
   gap: 20px;
   animation: fade-in 0.8s ease;
+  position: relative;
+  z-index: 1;
 }
 
 .quantum-home__hero-eyebrow {
@@ -218,6 +235,26 @@ select {
   letter-spacing: 0.3em;
   font-size: 0.75rem;
   color: var(--text-muted);
+}
+
+.quantum-home__hero-brand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+}
+
+.quantum-home__hero-logo {
+  width: 140px;
+  height: auto;
+  filter: drop-shadow(0 0 20px rgba(255, 106, 0, 0.35));
+}
+
+.quantum-home__hero-brandline {
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+  font-size: 0.7rem;
+  color: #f7f4eb;
 }
 
 .quantum-home__hero-title {
@@ -306,6 +343,8 @@ select {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  position: relative;
+  z-index: 1;
 }
 
 .quantum-home__section-header h2 {
@@ -337,6 +376,8 @@ select {
   flex-direction: column;
   gap: 12px;
   transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  position: relative;
+  z-index: 1;
 }
 
 .quantum-home__portal-card-header {
@@ -387,6 +428,8 @@ select {
   font-size: 0.75rem;
   color: var(--text-muted);
   padding-bottom: 12px;
+  position: relative;
+  z-index: 1;
 }
 
 .landing-error {
@@ -416,6 +459,18 @@ select {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes drift {
+  0% {
+    transform: translate3d(-2%, -2%, 0);
+  }
+  50% {
+    transform: translate3d(2%, 4%, 0);
+  }
+  100% {
+    transform: translate3d(-2%, -2%, 0);
   }
 }
 

@@ -139,8 +139,19 @@ function LoadingState() {
 function MainContent() {
   return (
     <div className="quantum-home" role="main" aria-label="Homepage main content">
+      <div className="quantum-home__backdrop" aria-hidden="true" />
       <header className="quantum-home__hero">
         <div className="quantum-home__hero-eyebrow">FusionEMS Quantum Platform</div>
+        <div className="quantum-home__hero-brand">
+          <img
+            src="/brand/fusionems-quantum.png"
+            alt="FusionEMS Quantum"
+            className="quantum-home__hero-logo"
+          />
+          <span className="quantum-home__hero-brandline">
+            Regulated Enterprise Command
+          </span>
+        </div>
         <h1 className="quantum-home__hero-title">Regulated EMS Operating System</h1>
         <p className="quantum-home__hero-subtitle">
           FusionEMS Quantum is the audit-defensible command layer for EMS, Fire-EMS, HEMS, and
