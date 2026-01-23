@@ -1,9 +1,49 @@
 import React, { Suspense, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 
-/* =========================
-   Metadata + Analytics
-   ========================= */
+const portalCards = [
+  {
+    title: 'Agency Operations',
+    description: 'Command surface for dispatch, staffing, and operational readiness.',
+    to: '/dashboard',
+  },
+  {
+    title: 'Provider Portal',
+    description: 'Clinical workflows for crews, documentation, and care continuity.',
+    to: '/provider-portal',
+  },
+  {
+    title: 'Medical Transport Billing',
+    description: 'Patient-facing billing and claims access for transport services.',
+    to: '/patient-portal',
+  },
+  {
+    title: 'Fire-EMS Command',
+    description: 'Incident coordination, apparatus readiness, and personnel tracking.',
+    to: '/fire',
+  },
+  {
+    title: 'HEMS Operations',
+    description: 'Mission board, crew readiness, and aircraft oversight.',
+    to: '/hems',
+  },
+  {
+    title: 'Telehealth & Virtual Care',
+    description: 'Remote clinical support and continuity of care pathways.',
+    to: '/telehealth',
+  },
+  {
+    title: 'Compliance & Legal Readiness',
+    description: 'Audit trails, regulatory reporting, and legal hold management.',
+    to: '/reporting',
+  },
+  {
+    title: 'Founder Control Plane',
+    description: 'Executive visibility across governance, exports, and oversight.',
+    to: '/founder',
+  },
+]
+
 function useLandingMetadata() {
   useEffect(() => {
     const title = 'FusionEMS Quantum | Regulated EMS Platform'
@@ -50,9 +90,6 @@ function useLandingMetadata() {
   }, [])
 }
 
-/* =========================
-   Page
-   ========================= */
 export default function Landing() {
   useLandingMetadata()
 
@@ -65,9 +102,6 @@ export default function Landing() {
   )
 }
 
-/* =========================
-   Error Boundary
-   ========================= */
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props)
@@ -85,7 +119,7 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div role="alert" className="px-8 py-16 text-center text-red-400">
+        <div role="alert" className="landing-error">
           Something went wrong loading the homepage. Please try again later.
         </div>
       )
@@ -94,133 +128,107 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-/* =========================
-   Loading State
-   ========================= */
 function LoadingState() {
   return (
-    <div className="flex w-full flex-col items-center justify-center py-24 text-[var(--text-muted)]">
-      <span className="animate-pulse">Loading homepage...</span>
+    <div className="landing-loading">
+      <span className="landing-loading__text">Loading homepage...</span>
     </div>
   )
 }
 
-/* =========================
-   Main Content
-   ========================= */
 function MainContent() {
   return (
-    <div
-      className="flex min-h-screen w-full flex-col items-center"
-      style={{
-        background: 'linear-gradient(180deg, #181a1f 0%, #23262b 100%)',
-      }}
-      role="main"
-      aria-label="Homepage main content"
-    >
-      {/* Hero */}
-      <section className="flex w-full max-w-3xl flex-col items-center gap-10 border-b border-white/10 px-8 pb-16 pt-24">
-        <h1
-          className="text-center text-4xl font-extrabold uppercase tracking-[0.35em] text-white"
-          tabIndex={0}
-        >
-          FusionEMS Quantum
-        </h1>
-
-        <p className="max-w-2xl text-center text-lg tracking-wide text-[var(--text-muted)]">
-          The regulated, audit-defensible EMS operating system for agencies,
-          hospitals, and compliance-driven partners.
+    <div className="quantum-home" role="main" aria-label="Homepage main content">
+      <header className="quantum-home__hero">
+        <div className="quantum-home__hero-eyebrow">FusionEMS Quantum Platform</div>
+        <h1 className="quantum-home__hero-title">Regulated EMS Operating System</h1>
+        <p className="quantum-home__hero-subtitle">
+          FusionEMS Quantum is the audit-defensible command layer for EMS, Fire-EMS, HEMS, and
+          hospital-integrated medical transport. Built for regulated operations where every mission
+          is traceable, accountable, and optimized.
         </p>
-
-        <div className="mt-4 flex w-full flex-col gap-4 md:flex-row">
-          <Link
-            className="flex-1 rounded-full bg-[var(--orange)] px-6 py-4 text-lg font-bold text-black"
-            to="/provider-portal"
-            role="button"
-          >
-            Request Medical Transport
+        <div className="quantum-home__hero-actions">
+          <Link className="quantum-home__primary-action" to="/login">
+            Secure Access
           </Link>
-
-          <Link
-            className="flex-1 rounded-full border border-[var(--orange)] bg-black/20 px-6 py-4 text-lg font-semibold text-[var(--orange)]"
-            to="/login"
-            role="button"
-          >
-            Access Platform
+          <Link className="quantum-home__secondary-action" to="/register">
+            Request Enterprise Access
           </Link>
-
-          <Link
-            className="flex-1 rounded-full border border-white/10 bg-black/20 px-6 py-4 text-lg font-semibold text-white"
-            to="/patient-portal"
-            role="button"
-          >
-            Pay My Medical Transport Bill
+          <Link className="quantum-home__tertiary-action" to="/provider-portal">
+            Provider Gateway
           </Link>
         </div>
+        <div className="quantum-home__hero-metrics">
+          <div>
+            <span className="quantum-home__metric-label">Regulatory posture</span>
+            <span className="quantum-home__metric-value">HIPAA • NEMSIS • NFIRS</span>
+          </div>
+          <div>
+            <span className="quantum-home__metric-label">Audit continuity</span>
+            <span className="quantum-home__metric-value">Cryptographic trails & legal holds</span>
+          </div>
+          <div>
+            <span className="quantum-home__metric-label">Mission assurance</span>
+            <span className="quantum-home__metric-value">Command-ready 24/7</span>
+          </div>
+        </div>
+      </header>
 
-        <div className="mt-2 flex w-full flex-col gap-4 md:flex-row">
-          <Link
-            className="flex-1 rounded-full border border-white/10 bg-black/20 px-5 py-3 text-base font-semibold text-white"
-            to="/telehealth"
-            role="button"
-          >
-            CareFusion Telehealth
-          </Link>
-
-          <Link
-            className="flex-1 rounded-full border border-white/10 bg-black/20 px-5 py-3 text-base font-semibold text-white"
-            to="/dashboard"
-            role="button"
-          >
-            MedicOS App Platform
-          </Link>
-
-          <Link
-            className="flex-1 rounded-full border border-white/10 bg-black/20 px-5 py-3 text-base font-semibold text-white"
-            to="/reporting"
-            role="button"
-          >
-            Compliance &amp; Legal Readiness
-          </Link>
-
-          <Link
-            className="flex-1 rounded-full border border-white/10 bg-black/20 px-5 py-3 text-base font-semibold text-white"
-            to="/register"
-            role="button"
-          >
-            Request Demo / Contact
-          </Link>
+      <section className="quantum-home__section">
+        <div className="quantum-home__section-header">
+          <h2>Platform Gateways</h2>
+          <p>
+            Every portal is a hardened entry point with role-aware access, compliance context, and
+            operational oversight.
+          </p>
+        </div>
+        <div className="quantum-home__portal-grid">
+          {portalCards.map((card) => (
+            <Link key={card.title} className="quantum-home__portal-card" to={card.to}>
+              <div className="quantum-home__portal-card-header">
+                <span>{card.title}</span>
+                <span aria-hidden="true">→</span>
+              </div>
+              <p>{card.description}</p>
+            </Link>
+          ))}
         </div>
       </section>
 
-      {/* Problem Section */}
-      <section className="flex w-full max-w-3xl flex-col gap-6 border-b border-white/10 px-8 py-16">
-        <h2 className="text-2xl font-bold uppercase tracking-[0.2em] text-white">
-          The Problem
-        </h2>
-
-        <ul className="list-disc space-y-3 pl-6 text-base text-[var(--text-muted)]">
-          <li>
-            Legacy EMS software is fragmented and outdated, risking patient care
-            and compliance.
-          </li>
-          <li>Medical transport and HEMS are underserved by generic platforms.</li>
-          <li>
-            Billing is delayed, manual, and exposes agencies to revenue loss and
-            audit risk.
-          </li>
-          <li>
-            Compliance exposure is real and growing—regulators expect
-            cryptographic audit trails, not paper logs.
-          </li>
-          <li>
-            Disconnected systems create data silos and operational blind spots.
-          </li>
-        </ul>
+      <section className="quantum-home__section quantum-home__authority">
+        <div className="quantum-home__section-header">
+          <h2>Operational Authority</h2>
+          <p>
+            Designed for agencies that answer to regulators, boards, and mission-critical outcomes.
+            FusionEMS Quantum delivers clarity, accountability, and executive-grade visibility.
+          </p>
+        </div>
+        <div className="quantum-home__authority-grid">
+          <div>
+            <h3>Compliance Embedded</h3>
+            <p>
+              Automated policy enforcement, cryptographic audit trails, and regulatory reporting keep
+              every mission defensible.
+            </p>
+          </div>
+          <div>
+            <h3>Command-Grade Visibility</h3>
+            <p>
+              Unified oversight across dispatch, clinical, billing, and governance with decisive
+              decision support.
+            </p>
+          </div>
+          <div>
+            <h3>Enterprise Readiness</h3>
+            <p>
+              Integrations and workflows tailored to hospital partners, compliance officers, and
+              public sector leadership.
+            </p>
+          </div>
+        </div>
       </section>
 
-      {/* Footer */}
-      <footer className="mt-16 w-full pb-4 text-center text-xs text-[var(--text-muted)]">
+      <footer className="quantum-home__footer">
         © {new Date().getFullYear()} FusionEMS Quantum — Enterprise EMS Platform
       </footer>
     </div>

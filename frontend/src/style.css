@@ -190,6 +190,235 @@ select {
   justify-content: center;
 }
 
+.quantum-home {
+  min-height: 100vh;
+  padding: clamp(32px, 5vw, 80px);
+  background: linear-gradient(180deg, #101114 0%, #1b1d22 55%, #111216 100%);
+  color: #f7f4eb;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(48px, 6vw, 80px);
+}
+
+.quantum-home__hero {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 28px;
+  padding: clamp(32px, 5vw, 72px);
+  background: radial-gradient(circle at top left, rgba(255, 106, 0, 0.12), transparent 45%),
+    rgba(8, 8, 8, 0.8);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: fade-in 0.8s ease;
+}
+
+.quantum-home__hero-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.quantum-home__hero-title {
+  font-size: clamp(2.6rem, 4.2vw, 4rem);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.quantum-home__hero-subtitle {
+  max-width: 720px;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+
+.quantum-home__hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.quantum-home__primary-action,
+.quantum-home__secondary-action,
+.quantum-home__tertiary-action {
+  padding: 14px 28px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 0.75rem;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 200px;
+}
+
+.quantum-home__primary-action {
+  background: linear-gradient(135deg, var(--orange), var(--red));
+  color: #050505;
+  font-weight: 700;
+  box-shadow: 0 10px 30px rgba(255, 106, 0, 0.25);
+}
+
+.quantum-home__secondary-action {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #f7f4eb;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.quantum-home__tertiary-action {
+  border-color: rgba(255, 106, 0, 0.4);
+  color: var(--orange);
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.quantum-home__primary-action:hover,
+.quantum-home__secondary-action:hover,
+.quantum-home__tertiary-action:hover,
+.quantum-home__portal-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+
+.quantum-home__hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 18px;
+  padding-top: 12px;
+}
+
+.quantum-home__metric-label {
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.quantum-home__metric-value {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.quantum-home__section {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.quantum-home__section-header h2 {
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 1rem;
+  margin-bottom: 10px;
+}
+
+.quantum-home__section-header p {
+  color: var(--text-muted);
+  max-width: 720px;
+  line-height: 1.7;
+}
+
+.quantum-home__portal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+}
+
+.quantum-home__portal-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  padding: 20px 22px;
+  background: rgba(8, 8, 8, 0.65);
+  color: #f7f4eb;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.quantum-home__portal-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.quantum-home__portal-card p {
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.quantum-home__portal-card:hover {
+  border-color: rgba(255, 106, 0, 0.45);
+}
+
+.quantum-home__authority {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 32px;
+}
+
+.quantum-home__authority-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 24px;
+}
+
+.quantum-home__authority-grid h3 {
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  font-size: 0.85rem;
+  margin-bottom: 10px;
+}
+
+.quantum-home__authority-grid p {
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.quantum-home__footer {
+  margin-top: auto;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  padding-bottom: 12px;
+}
+
+.landing-error {
+  padding: 64px 32px;
+  text-align: center;
+  color: #ff6a6a;
+}
+
+.landing-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 96px 32px;
+  color: var(--text-muted);
+}
+
+.landing-loading__text {
+  animation: fade-in 0.6s ease;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .signal-grid {
   position: absolute;
   inset: 0;
