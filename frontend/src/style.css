@@ -244,10 +244,41 @@ select {
   gap: 18px;
 }
 
-.quantum-home__hero-logo {
+.quantum-home__hero-logo-wrap {
+  position: relative;
   width: 140px;
+  height: 140px;
+  display: grid;
+  place-items: center;
+}
+
+.quantum-home__hero-logo {
+  width: 110px;
   height: auto;
   filter: drop-shadow(0 0 20px rgba(255, 106, 0, 0.35));
+  z-index: 2;
+}
+
+.quantum-home__hero-logo-orbit {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 0 30px rgba(255, 106, 0, 0.2);
+  animation: orbit 10s linear infinite;
+  opacity: 0.6;
+}
+
+.quantum-home__hero-logo-orbit--outer {
+  width: 140px;
+  height: 140px;
+  border-style: solid;
+}
+
+.quantum-home__hero-logo-orbit--inner {
+  width: 110px;
+  height: 110px;
+  border-style: dashed;
+  animation-duration: 7s;
 }
 
 .quantum-home__hero-brandline {
@@ -471,6 +502,15 @@ select {
   }
   100% {
     transform: translate3d(-2%, -2%, 0);
+  }
+}
+
+@keyframes orbit {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
   }
 }
 

@@ -143,11 +143,15 @@ function MainContent() {
       <header className="quantum-home__hero">
         <div className="quantum-home__hero-eyebrow">FusionEMS Quantum Platform</div>
         <div className="quantum-home__hero-brand">
-          <img
-            src="/brand/fusionems-quantum.png"
-            alt="FusionEMS Quantum"
-            className="quantum-home__hero-logo"
-          />
+          <div className="quantum-home__hero-logo-wrap" aria-hidden="true">
+            <span className="quantum-home__hero-logo-orbit quantum-home__hero-logo-orbit--outer" />
+            <span className="quantum-home__hero-logo-orbit quantum-home__hero-logo-orbit--inner" />
+            <img
+              src="/brand/fusionems-quantum.png"
+              alt="FusionEMS Quantum"
+              className="quantum-home__hero-logo"
+            />
+          </div>
           <span className="quantum-home__hero-brandline">
             Regulated Enterprise Command
           </span>
