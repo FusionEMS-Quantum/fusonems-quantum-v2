@@ -4,65 +4,36 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from core.config import settings
 
 
-def _connect_args(database_url: str) -> dict:
-    if database_url.startswith("sqlite"):
-        return {"check_same_thread": False}
-    return {}
+if not settings.DATABASE_URL:
+    raise RuntimeError("DATABASE_URL must be set to a PostgreSQL connection string.")
 
 
-def _resolve_database_url(database_url: str) -> str:
-    if database_url:
-        return database_url
-    return "sqlite:///./runtime.db"
+def _create_engine(database_url: str):
+    return create_engine(
+        database_url,
+        pool_pre_ping=True,
+        pool_size=settings.DB_POOL_SIZE,
+        max_overflow=settings.DB_MAX_OVERFLOW,
+    )
 
 
-database_url = _resolve_database_url(settings.DATABASE_URL)
-engine = create_engine(
-    database_url,
-    pool_pre_ping=True,
-    pool_size=settings.DB_POOL_SIZE,
-    max_overflow=settings.DB_MAX_OVERFLOW,
-    connect_args=_connect_args(database_url),
-)
+def _database_url_or_default(database_url: str) -> str:
+    return database_url or settings.DATABASE_URL
+
+
+engine = _create_engine(settings.DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-telehealth_database_url = _resolve_database_url(
-    settings.TELEHEALTH_DATABASE_URL or settings.DATABASE_URL
-)
-telehealth_engine = create_engine(
-    telehealth_database_url,
-    pool_pre_ping=True,
-    pool_size=settings.DB_POOL_SIZE,
-    max_overflow=settings.DB_MAX_OVERFLOW,
-    connect_args=_connect_args(telehealth_database_url),
-)
-TelehealthSessionLocal = sessionmaker(
-    autocommit=False, autoflush=False, bind=telehealth_engine
-)
+telehealth_engine = _create_engine(_database_url_or_default(settings.TELEHEALTH_DATABASE_URL))
+TelehealthSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=telehealth_engine)
 TelehealthBase = declarative_base()
 
-fire_database_url = _resolve_database_url(
-    settings.FIRE_DATABASE_URL or settings.DATABASE_URL
-)
-fire_engine = create_engine(
-    fire_database_url,
-    pool_pre_ping=True,
-    pool_size=settings.DB_POOL_SIZE,
-    max_overflow=settings.DB_MAX_OVERFLOW,
-    connect_args=_connect_args(fire_database_url),
-)
+fire_engine = _create_engine(_database_url_or_default(settings.FIRE_DATABASE_URL))
 FireSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=fire_engine)
 FireBase = declarative_base()
 
-hems_database_url = _resolve_database_url(settings.DATABASE_URL)
-hems_engine = create_engine(
-    hems_database_url,
-    pool_pre_ping=True,
-    pool_size=settings.DB_POOL_SIZE,
-    max_overflow=settings.DB_MAX_OVERFLOW,
-    connect_args=_connect_args(hems_database_url),
-)
+hems_engine = _create_engine(_database_url_or_default(settings.HEMS_DATABASE_URL))
 HemsSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=hems_engine)
 HemsBase = declarative_base()
 
