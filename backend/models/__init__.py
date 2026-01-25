@@ -51,6 +51,7 @@ from models.communications import (
     CommsRingGroup,
     CommsRoutingPolicy,
     CommsTask,
+    CommsTemplate,
     CommsThread,
     CommsTranscript,
     CommsVoicemail,
