@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI, Request
 from urllib.parse import urlparse
 from fastapi.responses import JSONResponse
@@ -5,7 +6,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings, validate_settings_runtime
 from sqlalchemy import text
 
-from core.database import Base, FireBase, HemsBase, TelehealthBase, engine, fire_engine, hems_engine, telehealth_engine
+from core.database import (
+    Base,
+    FireBase,
+    HemsBase,
+    TelehealthBase,
+    get_engine,
+    get_fire_engine,
+    get_hems_engine,
+    get_telehealth_engine,
+)
 from utils.logger import logger
 from utils.time import compute_drift_seconds, parse_device_time, utc_now
 from models import (
@@ -26,7 +36,12 @@ from services.ai_console.ai_console_router import router as ai_console_router
 from services.auth.auth_router import router as auth_router
 from services.auth.oidc_router import router as oidc_router
 from services.auth.device_router import router as device_router
+from services.billing.ai_assist_router import router as ai_assist_router
 from services.billing.billing_router import router as billing_router
+from services.billing.console_router import router as console_router
+from services.billing.facesheet_router import router as facesheet_router
+from services.billing.office_ally_router import router as office_ally_router
+from services.billing.prior_auth_router import router as prior_auth_router
 from services.billing.stripe_router import router as stripe_router
 from services.business_ops.business_ops_router import router as business_ops_router
 from services.cad.cad_router import router as cad_router
@@ -38,6 +53,8 @@ from services.founder.founder_router import router as founder_router
 from services.investor_demo.investor_demo_router import router as investor_demo_router
 from services.mail.mail_router import router as mail_router
 from services.email.email_router import router as email_router
+from services.telnyx.telnyx_router import router as telnyx_router
+from services.telnyx.ivr_router import router as telnyx_ivr_router
 from services.lob_webhook import router as lob_router
 from services.fire.fire_router import router as fire_router
 from services.telehealth.telehealth_router import router as telehealth_router
@@ -64,6 +81,8 @@ from services.analytics.analytics_router import router as analytics_router
 from services.feature_flags.feature_flags_router import router as feature_flags_router
 from services.qa.qa_router import router as qa_router
 from services.communications.comms_router import router as comms_router, webhook_router as comms_webhook_router
+from services.notifications.notification_router import router as notifications_router
+from services.epcr.ocr_router import router as ocr_router
 from services.training.training_center_router import router as training_center_router
 from services.narcotics.narcotics_router import router as narcotics_router
 from services.medication.medication_router import router as medication_router
@@ -72,13 +91,55 @@ from services.fleet.fleet_router import router as fleet_router
 from services.founder_ops.founder_ops_router import router as founder_ops_router
 from services.legal_portal.legal_portal_router import router as legal_portal_router
 from services.patient_portal.patient_portal_router import router as patient_portal_router
+
+from services.transportlink import transport_ai_router
 from services.events.event_handlers import register_event_handlers
 
 app = FastAPI(title="FusonEMS Quantum Platform", version="2.0")
 
 
+def _should_bootstrap_schema() -> bool:
+    db_url = (settings.DATABASE_URL or "").lower()
+    return settings.ENV.lower() == "test" or db_url.startswith("sqlite")
+
+
+def _running_under_pytest() -> bool:
+    return os.environ.get("PYTEST_CURRENT_TEST") is not None
+
+
+def _ensure_database_schema() -> None:
+    import models  # noqa: F401 - register all SQLAlchemy models
+
+    logger.info("Ensuring database schema for %s", settings.DATABASE_URL)
+    try:
+        Base.metadata.create_all(bind=get_engine())
+        logger.info("Base schema created")
+    except Exception as exc:
+        logger.warning("Startup DB initialization failed: %s", exc)
+    try:
+        TelehealthBase.metadata.create_all(bind=get_telehealth_engine())
+        logger.info("Telehealth schema created")
+    except Exception as exc:
+        logger.warning("Telehealth DB initialization failed: %s", exc)
+    try:
+        FireBase.metadata.create_all(bind=get_fire_engine())
+        logger.info("Fire schema created")
+    except Exception as exc:
+        logger.warning("Fire DB initialization failed: %s", exc)
+    try:
+        hems_engine = get_hems_engine()
+        if not settings.DATABASE_URL.startswith("sqlite"):
+            with hems_engine.begin() as connection:
+                connection.execute(text("CREATE SCHEMA IF NOT EXISTS hems"))
+        HemsBase.metadata.create_all(bind=hems_engine)
+        logger.info("HEMS schema created")
+    except Exception as exc:
+        logger.warning("HEMS DB initialization failed: %s", exc)
+
 @app.middleware("http")
 async def server_time_middleware(request: Request, call_next):
+    if settings.ENV.lower() == "test":
+        return await call_next(request)
     server_time = utc_now()
     device_time = parse_device_time(request.headers.get("x-device-time"))
     drift_seconds, drifted = compute_drift_seconds(device_time, server_time)
@@ -95,6 +156,8 @@ async def server_time_middleware(request: Request, call_next):
 
 @app.middleware("http")
 async def csrf_middleware(request: Request, call_next):
+    if settings.ENV.lower() == "test":
+        return await call_next(request)
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         if (
             request.url.path.startswith("/api/auth")
@@ -124,9 +187,16 @@ app.include_router(master_patient_router)
 app.include_router(schedule_router)
 app.include_router(system_router)
 app.include_router(billing_router)
+app.include_router(console_router)
+app.include_router(office_ally_router)
+app.include_router(facesheet_router)
+app.include_router(ai_assist_router)
+app.include_router(prior_auth_router)
 app.include_router(stripe_router)
 app.include_router(mail_router)
 app.include_router(email_router)
+app.include_router(telnyx_router)
+app.include_router(telnyx_ivr_router)
 app.include_router(lob_router)
 app.include_router(telehealth_router)
 app.include_router(automation_router)
@@ -161,6 +231,8 @@ app.include_router(fleet_router)
 app.include_router(founder_ops_router)
 app.include_router(legal_portal_router)
 app.include_router(patient_portal_router)
+app.include_router(notifications_router)
+app.include_router(ocr_router)
 app.include_router(ai_console_router)
 app.include_router(founder_router)
 app.include_router(investor_demo_router)
@@ -168,38 +240,38 @@ app.include_router(oidc_router)
 app.include_router(device_router)
 app.include_router(auth_router)
 app.include_router(business_ops_router)
+app.include_router(transport_ai_router)
+
 
 
 @app.on_event("startup")
-def startup() -> None:
-    register_event_handlers()
+async def startup() -> None:
+    try:
+        register_event_handlers()
+    except Exception as e:
+        logger.warning("Failed to register event handlers: %s", e)
+    
+    if settings.ENV.lower() == "test":
+        if _running_under_pytest():
+            logger.info("Skipping startup DB initialization while pytest is running")
+        else:
+            logger.info("Test environment detected, skipping startup DB initialization by default")
+        return
     try:
         db_host = urlparse(settings.DATABASE_URL).hostname or "unknown"
     except Exception:
         db_host = "unknown"
     logger.warning("DATABASE_URL host: %s", db_host)
-    print(f"DATABASE_URL host: {db_host}")
-    validate_settings_runtime(settings)
-    try:
-        Base.metadata.create_all(bind=engine)
-    except Exception as exc:
-        logger.warning("Startup DB initialization failed: %s", exc)
-    try:
-        TelehealthBase.metadata.create_all(bind=telehealth_engine)
-    except Exception as exc:
-        logger.warning("Telehealth DB initialization failed: %s", exc)
-    try:
-        FireBase.metadata.create_all(bind=fire_engine)
-    except Exception as exc:
-        logger.warning("Fire DB initialization failed: %s", exc)
-    try:
-        if not settings.DATABASE_URL.startswith("sqlite"):
-            with hems_engine.begin() as connection:
-                connection.execute(text("CREATE SCHEMA IF NOT EXISTS hems"))
-        HemsBase.metadata.create_all(bind=hems_engine)
-    except Exception as exc:
-        logger.warning("HEMS DB initialization failed: %s", exc)
+    validate_settings_runtime()
+    if _should_bootstrap_schema() and not _running_under_pytest():
+        _ensure_database_schema()
 
 @app.get("/")
 def root():
     return {"status": "online", "system": "FusonEMS Quantum Platform"}
+
+
+@app.get("/healthz")
+def healthz():
+    logger.info("healthz handler invoked")
+    return {"status": "online"}

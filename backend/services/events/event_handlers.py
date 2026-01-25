@@ -1,5 +1,6 @@
 from utils.events import event_bus
 from utils.logger import logger
+from services.notifications.handlers import register_notification_handlers
 
 
 def register_event_handlers() -> None:
@@ -16,3 +17,5 @@ def register_event_handlers() -> None:
         "RECORD_ACCESSED",
     ]:
         event_bus.register(event_type, log_handler)
+
+    register_notification_handlers()

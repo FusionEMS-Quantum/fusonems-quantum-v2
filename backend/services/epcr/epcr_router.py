@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 import json
 from typing import Optional
 
@@ -143,41 +144,117 @@ def _normalize(value: str) -> str:
     return "".join(char for char in value.lower().strip() if char.isalnum() or char.isspace()).strip()
 
 
+def _normalize_digits(value: str) -> str:
+    return "".join(char for char in value if char.isdigit())
+
+
+def _similarity(left: str, right: str) -> float:
+    if not left or not right:
+        return 0.0
+    if left == right:
+        return 1.0
+    return SequenceMatcher(None, left, right).ratio()
+
+
 def _load_mpi_weights() -> dict:
-    try:
-        weights = json.loads(settings.MPI_MATCH_WEIGHTS or "{}")
-        if isinstance(weights, dict):
-            return weights
-    except json.JSONDecodeError:
-        pass
-    return {
-        "first_name": 0.25,
-        "last_name": 0.25,
-        "date_of_birth": 0.3,
-        "phone": 0.1,
-        "address": 0.1,
+    default_weights = {
+        "first_name": 0.3,
+        "last_name": 0.3,
+        "date_of_birth": 0.25,
+        "phone": 0.15,
     }
+    raw_weights = getattr(settings, "MPI_MATCH_WEIGHTS", None)
+    if raw_weights:
+        try:
+            weights = json.loads(raw_weights)
+            if isinstance(weights, dict):
+                filtered = {key: float(val) for key, val in weights.items() if key in default_weights}
+                total = sum(filtered.values())
+                if total > 0:
+                    return {key: val / total for key, val in filtered.items()}
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+    return default_weights
+
+
+def _load_mpi_threshold() -> float:
+    raw_threshold = getattr(settings, "MPI_MATCH_THRESHOLD", 0.8)
+    try:
+        threshold = float(raw_threshold)
+    except (TypeError, ValueError):
+        threshold = 0.8
+    return max(0.0, min(1.0, threshold))
+
+
+def _dob_similarity(left: str, right: str) -> tuple[float, list[str]]:
+    reasons = []
+    if not left or not right:
+        return 0.0, reasons
+    left_digits = _normalize_digits(left)
+    right_digits = _normalize_digits(right)
+    if not left_digits or not right_digits:
+        return 0.0, reasons
+    if left_digits == right_digits:
+        reasons.append("MPI.DOB.EXACT")
+        return 1.0, reasons
+    if len(left_digits) >= 6 and len(right_digits) >= 6 and left_digits[:6] == right_digits[:6]:
+        reasons.append("MPI.DOB.MONTHYEAR")
+        return 0.7, reasons
+    if len(left_digits) >= 4 and len(right_digits) >= 4 and left_digits[:4] == right_digits[:4]:
+        reasons.append("MPI.DOB.YEAR")
+        return 0.4, reasons
+    return 0.0, reasons
+
+
+def _phone_similarity(left: str, right: str) -> tuple[float, list[str]]:
+    reasons = []
+    left_digits = _normalize_digits(left or "")
+    right_digits = _normalize_digits(right or "")
+    if not left_digits or not right_digits:
+        return 0.0, reasons
+    if left_digits == right_digits:
+        reasons.append("MPI.PHONE.EXACT")
+        return 1.0, reasons
+    if len(left_digits) >= 7 and len(right_digits) >= 7 and left_digits[-7:] == right_digits[-7:]:
+        reasons.append("MPI.PHONE.LAST7")
+        return 0.7, reasons
+    if len(left_digits) >= 4 and len(right_digits) >= 4 and left_digits[-4:] == right_digits[-4:]:
+        reasons.append("MPI.PHONE.LAST4")
+        return 0.4, reasons
+    return 0.0, reasons
 
 
 def _compute_match(patient: Patient, master_patient: MasterPatient) -> tuple[float, list[str]]:
     weights = _load_mpi_weights()
     score = 0.0
     reasons = []
-    if _normalize(patient.first_name) and _normalize(patient.first_name) == _normalize(master_patient.first_name):
-        score += weights.get("first_name", 0.0)
+
+    first_similarity = _similarity(_normalize(patient.first_name), _normalize(master_patient.first_name))
+    if first_similarity == 1.0:
         reasons.append("MPI.NAME.FIRST.EXACT")
-    if _normalize(patient.last_name) and _normalize(patient.last_name) == _normalize(master_patient.last_name):
-        score += weights.get("last_name", 0.0)
+    elif first_similarity >= 0.85:
+        reasons.append("MPI.NAME.FIRST.NEAR")
+    elif first_similarity >= 0.6:
+        reasons.append("MPI.NAME.FIRST.PARTIAL")
+    score += weights.get("first_name", 0.0) * first_similarity
+
+    last_similarity = _similarity(_normalize(patient.last_name), _normalize(master_patient.last_name))
+    if last_similarity == 1.0:
         reasons.append("MPI.NAME.LAST.EXACT")
-    if patient.date_of_birth and patient.date_of_birth == master_patient.date_of_birth:
-        score += weights.get("date_of_birth", 0.0)
-        reasons.append("MPI.DOB.EXACT")
-    if patient.phone and master_patient.phone and _normalize(patient.phone) == _normalize(master_patient.phone):
-        score += weights.get("phone", 0.0)
-        reasons.append("MPI.PHONE.EXACT")
-    if patient.address and master_patient.address and _normalize(patient.address) == _normalize(master_patient.address):
-        score += weights.get("address", 0.0)
-        reasons.append("MPI.ADDRESS.EXACT")
+    elif last_similarity >= 0.85:
+        reasons.append("MPI.NAME.LAST.NEAR")
+    elif last_similarity >= 0.6:
+        reasons.append("MPI.NAME.LAST.PARTIAL")
+    score += weights.get("last_name", 0.0) * last_similarity
+
+    dob_similarity, dob_reasons = _dob_similarity(patient.date_of_birth, master_patient.date_of_birth)
+    reasons.extend(dob_reasons)
+    score += weights.get("date_of_birth", 0.0) * dob_similarity
+
+    phone_similarity, phone_reasons = _phone_similarity(patient.phone, master_patient.phone)
+    reasons.extend(phone_reasons)
+    score += weights.get("phone", 0.0) * phone_similarity
+
     return round(score, 4), reasons
 
 
@@ -271,7 +348,7 @@ def repeat_candidates(
         if master_patient.id in linked_ids:
             continue
         score, reasons = _compute_match(patient, master_patient)
-        if score >= settings.MPI_MATCH_THRESHOLD:
+        if score >= _load_mpi_threshold():
             candidates.append(
                 RepeatCandidate(
                     master_patient_id=master_patient.id, score=score, reasons=reasons
@@ -304,16 +381,19 @@ def link_master_patient(
     master_patient = get_scoped_record(
         db, request, MasterPatient, payload.master_patient_id, user, resource_label="master_patient"
     )
+    if master_patient.merged_into_id is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Master patient already merged")
     existing = (
         db.query(MasterPatientLink)
         .filter(
             MasterPatientLink.epcr_patient_id == patient.id,
-            MasterPatientLink.master_patient_id == master_patient.id,
         )
         .first()
     )
     if existing:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Link already exists")
+        if existing.master_patient_id == master_patient.id:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Link already exists")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Patient already linked to master patient")
     link = MasterPatientLink(
         org_id=user.org_id,
         epcr_patient_id=patient.id,

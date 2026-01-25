@@ -7,10 +7,12 @@ from core.database import Base
 
 class UserRole(str, Enum):
     admin = "admin"
+    ops_admin = "ops_admin"
     dispatcher = "dispatcher"
     provider = "provider"
     investor = "investor"
     founder = "founder"
+    support = "support"
     pilot = "pilot"
     flight_nurse = "flight_nurse"
     flight_medic = "flight_medic"
@@ -19,6 +21,8 @@ class UserRole(str, Enum):
     medical_director = "medical_director"
     crew = "crew"
     billing = "billing"
+    facility_admin = "facility_admin"
+    facility_user = "facility_user"
 
 
 class User(Base):

@@ -38,56 +38,16 @@ class TokenResponse(BaseModel):
     user: dict | None = None
 
 
-@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-def register(
-    payload: RegisterPayload,
-    db: Session = Depends(get_db),
-    request: Request = None,
-    response: Response = None,
-):
-    if not settings.LOCAL_AUTH_ENABLED:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="LOCAL_AUTH_DISABLED")
-    if request is not None and settings.ENV == "production":
-        bucket = f"register:{request.client.host}"
-        if not check_rate_limit(bucket, settings.AUTH_RATE_LIMIT_PER_MIN):
-            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="RATE_LIMIT")
-    existing = db.query(User).filter(User.email == payload.email).first()
-    if existing:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User exists")
-    org = db.query(Organization).filter(Organization.name == payload.organization_name).first()
-    org_created = False
-    if not org:
-        org = Organization(
-            name=payload.organization_name,
-            encryption_key=secrets.token_hex(32),
-        )
-        db.add(org)
-        db.commit()
-        db.refresh(org)
-        org_created = True
-        for module_key, deps in MODULE_DEPENDENCIES.items():
-            db.add(
-                ModuleRegistry(
-                    org_id=org.id,
-                    module_key=module_key,
-                    dependencies=deps,
-                    enabled=True,
-                    kill_switch=False,
-                )
-            )
-        db.commit()
-        seed_retention_policies(db, org.id)
-    user = User(
-        email=payload.email,
-        full_name=payload.full_name,
-        hashed_password=hash_password(payload.password),
-        role=payload.role.value,
-        org_id=org.id,
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    if request is not None:
+def _maybe_emit_register_audit(
+    db: Session,
+    request: Request,
+    user: User,
+    org: Organization,
+    org_created: bool,
+) -> None:
+    if not settings.ENABLE_AUTH_REGISTER_AUDIT_LOGGING or request is None:
+        return
+    try:
         if org_created:
             audit_and_event(
                 db=db,
@@ -111,23 +71,93 @@ def register(
             event_type="auth.user.registered",
             event_payload={"user_id": user.id},
         )
-    token = create_access_token({"sub": user.id, "org": user.org_id, "role": user.role, "mfa": False})
-    if response is not None:
-        response.set_cookie(
-            settings.SESSION_COOKIE_NAME,
-            token,
-            httponly=True,
-            secure=settings.ENV == "production",
-            samesite="lax",
+    except Exception as exc:  # pragma: no cover - best effort logging
+        print("REGISTER_AUDIT_FAILED", exc)
+
+
+@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+def register(
+    payload: RegisterPayload,
+    db: Session = Depends(get_db),
+    request: Request = None,
+    response: Response = None,
+):
+    print("REGISTER_START", flush=True)
+    if not settings.LOCAL_AUTH_ENABLED:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="LOCAL_AUTH_DISABLED")
+    if request is not None and settings.ENV == "production":
+        bucket = f"register:{request.client.host}"
+        if not check_rate_limit(bucket, settings.AUTH_RATE_LIMIT_PER_MIN):
+            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="RATE_LIMIT")
+    result: TokenResponse | None = None
+    try:
+        existing = db.query(User).filter(User.email == payload.email).first()
+        if existing:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User exists")
+        org = db.query(Organization).filter(Organization.name == payload.organization_name).first()
+        org_created = False
+        if not org:
+            org = Organization(
+                name=payload.organization_name,
+                encryption_key=secrets.token_hex(32),
+            )
+            db.add(org)
+            db.flush()
+            org_created = True
+            for module_key, deps in MODULE_DEPENDENCIES.items():
+                db.add(
+                    ModuleRegistry(
+                        org_id=org.id,
+                        module_key=module_key,
+                        dependencies=deps,
+                        enabled=True,
+                        kill_switch=False,
+                    )
+                )
+            db.commit()
+            db.refresh(org)
+            seed_retention_policies(db, org.id)
+        print("REGISTER_HASH_START", flush=True)
+        user = User(
+            email=payload.email,
+            full_name=payload.full_name,
+            hashed_password=hash_password(payload.password),
+            role=payload.role.value,
+            org_id=org.id,
         )
-        response.set_cookie(
-            settings.CSRF_COOKIE_NAME,
-            secrets.token_hex(16),
-            httponly=False,
-            secure=settings.ENV == "production",
-            samesite="lax",
+        db.add(user)
+        db.flush()
+        print("REGISTER_DB_COMMIT_START", flush=True)
+        db.commit()
+        db.refresh(user)
+        _maybe_emit_register_audit(db, request, user, org, org_created)
+        token = create_access_token(
+            {"sub": user.id, "org": user.org_id, "role": user.role, "mfa": False}
         )
-    return TokenResponse(access_token=token, user=model_snapshot(user))
+        if response is not None:
+            response.set_cookie(
+                settings.SESSION_COOKIE_NAME,
+                token,
+                httponly=True,
+                secure=settings.ENV == "production",
+                samesite="lax",
+            )
+            response.set_cookie(
+                settings.CSRF_COOKIE_NAME,
+                secrets.token_hex(16),
+                httponly=False,
+                secure=settings.ENV == "production",
+                samesite="lax",
+            )
+        result = TokenResponse(access_token=token, user=model_snapshot(user))
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        print("REGISTER_END", flush=True)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Registration failed")
+    return result
 
 
 @router.post("/login", response_model=TokenResponse)

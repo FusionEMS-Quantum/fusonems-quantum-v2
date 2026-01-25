@@ -4,7 +4,7 @@ from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from core.database import get_fire_db
@@ -21,11 +21,14 @@ from models.fire import (
     FirePersonnel,
     FirePreventionRecord,
     FireTrainingRecord,
+    FireIncidentTimeline,
+    FireInventoryHook,
 )
 from models.user import User, UserRole
 from utils.tenancy import get_scoped_record, scoped_query
 from utils.ai_registry import register_ai_output
 from utils.legal import enforce_legal_hold
+from utils.time import utc_now
 from utils.write_ops import apply_training_mode, audit_and_event, model_snapshot
 
 router = APIRouter(
@@ -40,6 +43,12 @@ class IncidentCreate(BaseModel):
     location: str
     incident_category: str = "Structure"
     incident_subtype: str = ""
+    incident_number: str | None = None
+    incident_type_category: str = ""
+    local_descriptor: str = ""
+    alarm_datetime: datetime | None = None
+    location_latitude: float | None = None
+    location_longitude: float | None = None
     priority: str = "Routine"
     hybrid_ems: bool = False
     ems_incident_id: str = ""
@@ -47,6 +56,39 @@ class IncidentCreate(BaseModel):
     property_use: str = ""
     situation_found: str = ""
     narrative: str = ""
+    actions_taken: str = ""
+    exposures: list[str] = Field(default_factory=list)
+    responding_units: list[str] = Field(default_factory=list)
+    civilian_casualties: int = 0
+    civilian_casualty_details: str = ""
+    firefighter_casualties: int = 0
+    firefighter_casualty_details: str = ""
+
+
+class IncidentUpdate(BaseModel):
+    location: str | None = None
+    incident_type: str | None = None
+    incident_number: str | None = None
+    incident_category: str | None = None
+    incident_subtype: str | None = None
+    incident_type_category: str | None = None
+    local_descriptor: str | None = None
+    alarm_datetime: datetime | None = None
+    location_latitude: float | None = None
+    location_longitude: float | None = None
+    priority: str | None = None
+    loss_estimate: float | None = None
+    property_use: str | None = None
+    situation_found: str | None = None
+    narrative: str | None = None
+    actions_taken: str | None = None
+    exposures: list[str] | None = None
+    responding_units: list[str] | None = None
+    civilian_casualties: int | None = None
+    civilian_casualty_details: str | None = None
+    firefighter_casualties: int | None = None
+    firefighter_casualty_details: str | None = None
+    status: str | None = None
 
 
 class IncidentTimelineUpdate(BaseModel):
@@ -70,6 +112,14 @@ class IncidentApproval(BaseModel):
 
 class IncidentLinkEms(BaseModel):
     ems_incident_id: str
+
+
+class InventoryHookCreate(BaseModel):
+    equipment_type: str
+    quantity: int = 1
+    usage_summary: str = ""
+    notes: str = ""
+    payload: dict = Field(default_factory=dict)
 
 
 class ApparatusCreate(BaseModel):
@@ -145,6 +195,55 @@ def log_audit(
     )
 
 
+def record_timeline_event(
+    db: Session,
+    request: Request,
+    user: User,
+    incident: FireIncident,
+    event_type: str,
+    notes: str = "",
+    event_data: dict | None = None,
+) -> FireIncidentTimeline:
+    entry = FireIncidentTimeline(
+        org_id=user.org_id,
+        incident_id=incident.id,
+        incident_identifier=incident.incident_id,
+        event_type=event_type,
+        notes=notes,
+        event_data=event_data or {},
+    )
+    apply_training_mode(entry, request)
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="timeline",
+        resource="fire_incident_timeline",
+        classification=entry.classification,
+        after_state=model_snapshot(entry),
+        event_type=f"fire.incident.timeline.{event_type}",
+        event_payload={
+            "incident_id": incident.incident_id,
+            "event_id": entry.id,
+            "notes": notes,
+        },
+    )
+    return entry
+
+
+def ensure_incident_editable(incident: FireIncident, incoming_status: str | None = None) -> None:
+    if incident.status in {"Closed", "Exported"}:
+        if incoming_status == incident.status or incoming_status == "Open":
+            return
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Incident is closed. Reopen to make updates.",
+        )
+
+
 @router.post("/incidents", status_code=status.HTTP_201_CREATED)
 def create_incident(
     payload: IncidentCreate,
@@ -152,13 +251,20 @@ def create_incident(
     db: Session = Depends(get_fire_db),
     user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher)),
 ):
+    incident_number = payload.incident_number or f"FIR-{uuid4().hex[:6].upper()}"
     incident = FireIncident(
         org_id=user.org_id,
         incident_id=f"FIR-{uuid4().hex[:8].upper()}",
+        incident_number=incident_number,
         incident_type=payload.incident_type,
         incident_category=payload.incident_category,
         incident_subtype=payload.incident_subtype,
+        neris_category=payload.incident_type_category,
+        local_descriptor=payload.local_descriptor,
         location=payload.location,
+        location_latitude=payload.location_latitude,
+        location_longitude=payload.location_longitude,
+        alarm_datetime=payload.alarm_datetime or utc_now(),
         priority=payload.priority,
         hybrid_ems=payload.hybrid_ems,
         ems_incident_id=payload.ems_incident_id,
@@ -166,6 +272,13 @@ def create_incident(
         property_use=payload.property_use,
         situation_found=payload.situation_found,
         narrative=payload.narrative,
+        actions_taken=payload.actions_taken,
+        exposures=payload.exposures,
+        responding_units=payload.responding_units,
+        civilian_casualties=payload.civilian_casualties,
+        civilian_casualty_details=payload.civilian_casualty_details,
+        firefighter_casualties=payload.firefighter_casualties,
+        firefighter_casualty_details=payload.firefighter_casualty_details,
     )
     apply_training_mode(incident, request)
     db.add(incident)
@@ -184,6 +297,14 @@ def create_incident(
         event_payload={"incident_id": incident.incident_id},
     )
     db.commit()
+    record_timeline_event(
+        db=db,
+        request=request,
+        user=user,
+        incident=incident,
+        event_type="created",
+        notes="Incident created",
+    )
     return model_snapshot(incident)
 
 
@@ -216,6 +337,30 @@ def get_incident(
     )
 
 
+@router.get("/incidents/{incident_id}/timeline")
+def incident_timeline(
+    incident_id: str,
+    request: Request,
+    db: Session = Depends(get_fire_db),
+    user: User = Depends(require_roles()),
+):
+    incident = get_scoped_record(
+        db,
+        request,
+        FireIncident,
+        incident_id,
+        user,
+        id_field="incident_id",
+        resource_label="fire-incident",
+    )
+    return (
+        scoped_query(db, FireIncidentTimeline, user.org_id, request.state.training_mode)
+        .filter(FireIncidentTimeline.incident_id == incident.id)
+        .order_by(FireIncidentTimeline.recorded_at.asc())
+        .all()
+    )
+
+
 @router.patch("/incidents/{incident_id}/timeline")
 def update_timeline(
     incident_id: str,
@@ -234,9 +379,12 @@ def update_timeline(
         resource_label="fire-incident",
     )
     enforce_legal_hold(db, user.org_id, "fire_incident", incident.incident_id, "update")
+    ensure_incident_editable(incident)
     before = model_snapshot(incident)
-    for field, value in payload.model_dump(exclude_none=True).items():
+    changes = payload.model_dump(exclude_none=True)
+    for field, value in changes.items():
         setattr(incident, field, value)
+    incident.updated_at = utc_now()
     log_audit(db, incident_id, "Updated timeline", actor_org_id=user.org_id)
     db.commit()
     db.refresh(incident)
@@ -252,6 +400,26 @@ def update_timeline(
         event_type="fire.incident.timeline_updated",
         event_payload={"incident_id": incident.incident_id},
     )
+    if changes:
+        if "on_scene_at" in changes:
+            record_timeline_event(
+                db=db,
+                request=request,
+                user=user,
+                incident=incident,
+                event_type="unit_arrived",
+                notes="Unit arrived on scene",
+                event_data={"timestamp": incident.on_scene_at.isoformat() if incident.on_scene_at else ""},
+            )
+        record_timeline_event(
+            db=db,
+            request=request,
+            user=user,
+            incident=incident,
+            event_type="updated",
+            notes="Timeline updated",
+            event_data={"fields": list(changes.keys())},
+        )
     return incident
 
 
@@ -273,9 +441,12 @@ def update_status(
         resource_label="fire-incident",
     )
     enforce_legal_hold(db, user.org_id, "fire_incident", incident.incident_id, "update")
+    ensure_incident_editable(incident, payload.status)
     before = model_snapshot(incident)
-    for field, value in payload.model_dump(exclude_none=True).items():
+    changes = payload.model_dump(exclude_none=True)
+    for field, value in changes.items():
         setattr(incident, field, value)
+    incident.updated_at = utc_now()
     log_audit(db, incident_id, "Updated status", actor_org_id=user.org_id)
     db.commit()
     db.refresh(incident)
@@ -291,7 +462,403 @@ def update_status(
         event_type="fire.incident.status_updated",
         event_payload={"incident_id": incident.incident_id},
     )
+    if payload.status:
+        record_timeline_event(
+            db=db,
+            request=request,
+            user=user,
+            incident=incident,
+            event_type="updated_status",
+            notes=f"Status updated to {payload.status}",
+            event_data={"status": payload.status},
+        )
     return incident
+
+
+@router.patch("/incidents/{incident_id}")
+def update_incident(
+    incident_id: str,
+    payload: IncidentUpdate,
+    request: Request,
+    db: Session = Depends(get_fire_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher)),
+):
+    incident = get_scoped_record(
+        db,
+        request,
+        FireIncident,
+        incident_id,
+        user,
+        id_field="incident_id",
+        resource_label="fire-incident",
+    )
+    enforce_legal_hold(db, user.org_id, "fire_incident", incident.incident_id, "update")
+    ensure_incident_editable(incident, payload.status)
+    before = model_snapshot(incident)
+    changes = payload.model_dump(exclude_none=True)
+    for field, value in changes.items():
+        setattr(incident, field, value)
+    incident.updated_at = utc_now()
+    log_audit(db, incident_id, "Updated incident", actor_org_id=user.org_id)
+    db.commit()
+    db.refresh(incident)
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="update",
+        resource="fire_incident",
+        classification=incident.classification,
+        before_state=before,
+        after_state=model_snapshot(incident),
+        event_type="fire.incident.updated",
+        event_payload={"incident_id": incident.incident_id},
+    )
+    if changes:
+        record_timeline_event(
+            db=db,
+            request=request,
+            user=user,
+            incident=incident,
+            event_type="updated",
+            notes="Incident data updated",
+            event_data={"fields": list(changes.keys())},
+        )
+    return incident
+
+
+@router.post("/incidents/{incident_id}/close")
+def close_incident(
+    incident_id: str,
+    request: Request,
+    db: Session = Depends(get_fire_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher)),
+):
+    incident = get_scoped_record(
+        db,
+        request,
+        FireIncident,
+        incident_id,
+        user,
+        id_field="incident_id",
+        resource_label="fire-incident",
+    )
+    enforce_legal_hold(db, user.org_id, "fire_incident", incident.incident_id, "close")
+    ensure_incident_editable(incident, incoming_status="Closed")
+    before = model_snapshot(incident)
+    incident.status = "Closed"
+    incident.closed_at = utc_now()
+    incident.updated_at = utc_now()
+    log_audit(db, incident.incident_id, "Closed incident", actor_org_id=user.org_id)
+    db.commit()
+    db.refresh(incident)
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="close",
+        resource="fire_incident",
+        classification=incident.classification,
+        before_state=before,
+        after_state=model_snapshot(incident),
+        event_type="fire.incident.closed",
+        event_payload={"incident_id": incident.incident_id},
+    )
+    record_timeline_event(
+        db=db,
+        request=request,
+        user=user,
+        incident=incident,
+        event_type="closed",
+        notes="Incident closed",
+    )
+    return {"status": "closed", "incident_id": incident.incident_id}
+
+
+def _persist_fire_export(
+    db: Session,
+    request: Request,
+    user: User,
+    incident: FireIncident,
+    export_type: str,
+    payload: dict,
+    event_type: str,
+) -> FireExportRecord:
+    record = FireExportRecord(
+        org_id=user.org_id,
+        export_type=export_type,
+        incident_id=incident.incident_id,
+        payload=json.dumps(payload),
+    )
+    apply_training_mode(record, request)
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="create",
+        resource="fire_export",
+        classification=record.classification,
+        after_state=model_snapshot(record),
+        event_type=event_type,
+        event_payload={
+            "export_id": record.id,
+            "export_type": export_type,
+            "incident_id": incident.incident_id,
+        },
+    )
+    return record
+
+
+def _emit_export_generated_event(
+    db: Session,
+    request: Request,
+    user: User,
+    incident: FireIncident,
+    export_type: str,
+    payload: dict,
+    record: FireExportRecord,
+) -> None:
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="export",
+        resource="fire_export",
+        classification=incident.classification,
+        after_state={
+            "incident_id": incident.incident_id,
+            "export_id": record.id,
+            "export_type": export_type,
+        },
+        event_type="fire.export.generated",
+        event_payload={
+            "incident_id": incident.incident_id,
+            "export_id": record.id,
+            "export_type": export_type,
+            "format": payload.get("format"),
+        },
+    )
+
+
+def _build_neris_export_payload(
+    request: Request, db: Session, incident: FireIncident
+) -> dict:
+    training_mode = request.state.training_mode
+    apparatus_assignments = (
+        scoped_query(db, FireIncidentApparatus, incident.org_id, training_mode)
+        .filter(FireIncidentApparatus.incident_id == incident.id)
+        .all()
+    )
+    personnel_assignments = (
+        scoped_query(db, FireIncidentPersonnel, incident.org_id, training_mode)
+        .filter(FireIncidentPersonnel.incident_id == incident.id)
+        .all()
+    )
+    apparatus_ids = {assignment.apparatus_id for assignment in apparatus_assignments}
+    personnel_ids = {assignment.personnel_id for assignment in personnel_assignments}
+    apparatus_map = {}
+    personnel_map = {}
+    if apparatus_ids:
+        apparatus_map = {
+            apparatus.id: apparatus
+            for apparatus in (
+                scoped_query(db, FireApparatus, incident.org_id, training_mode)
+                .filter(FireApparatus.id.in_(list(apparatus_ids)))
+                .all()
+            )
+        }
+    if personnel_ids:
+        personnel_map = {
+            person.id: person
+            for person in (
+                scoped_query(db, FirePersonnel, incident.org_id, training_mode)
+                .filter(FirePersonnel.id.in_(list(personnel_ids)))
+                .all()
+            )
+        }
+
+    apparatus_payload = [
+        {
+            "assignment_id": assignment.id,
+            "apparatus_record_id": assignment.apparatus_id,
+            "apparatus_identifier": apparatus_map.get(assignment.apparatus_id).apparatus_id
+            if apparatus_map.get(assignment.apparatus_id)
+            else None,
+            "role": assignment.role,
+            "status": assignment.status,
+            "notes": assignment.notes,
+        }
+        for assignment in apparatus_assignments
+    ]
+    personnel_payload = [
+        {
+            "assignment_id": assignment.id,
+            "personnel_id": assignment.personnel_id,
+            "full_name": personnel_map.get(assignment.personnel_id).full_name
+            if personnel_map.get(assignment.personnel_id)
+            else None,
+            "role": assignment.role,
+            "status": assignment.status,
+            "notes": assignment.notes,
+        }
+        for assignment in personnel_assignments
+    ]
+
+    return {
+        "format": "NERIS",
+        "incident_id": incident.incident_id,
+        "incident_number": incident.incident_number,
+        "neris_category": incident.neris_category,
+        "local_descriptor": incident.local_descriptor,
+        "incident_type": incident.incident_type,
+        "location": {
+            "address": incident.location,
+            "latitude": incident.location_latitude,
+            "longitude": incident.location_longitude,
+        },
+        "alarm_datetime": incident.alarm_datetime.isoformat()
+        if incident.alarm_datetime
+        else None,
+        "priority": incident.priority,
+        "status": incident.status,
+        "responding_units": incident.responding_units or [],
+        "actions_taken": incident.actions_taken,
+        "exposures": incident.exposures,
+        "casualties": {
+            "civilian": {
+                "count": incident.civilian_casualties,
+                "details": incident.civilian_casualty_details,
+            },
+            "firefighter": {
+                "count": incident.firefighter_casualties,
+                "details": incident.firefighter_casualty_details,
+            },
+        },
+        "assignments": {
+            "apparatus": apparatus_payload,
+            "personnel": personnel_payload,
+        },
+        "narrative": incident.narrative,
+        "neris_status": incident.neris_status,
+        "nfirs_status": incident.nfirs_status,
+    }
+
+
+@router.post("/incidents/{incident_id}/export")
+def export_incident(
+    incident_id: str,
+    request: Request,
+    db: Session = Depends(get_fire_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher)),
+):
+    incident = get_scoped_record(
+        db,
+        request,
+        FireIncident,
+        incident_id,
+        user,
+        id_field="incident_id",
+        resource_label="fire-incident",
+    )
+    payload = _build_neris_export_payload(request, db, incident)
+    record = _persist_fire_export(
+        db=db,
+        request=request,
+        user=user,
+        incident=incident,
+        export_type="NERIS",
+        payload=payload,
+        event_type="fire.export.neris_created",
+    )
+    _emit_export_generated_event(
+        db=db,
+        request=request,
+        user=user,
+        incident=incident,
+        export_type="NERIS",
+        payload=payload,
+        record=record,
+    )
+    incident.status = "Exported"
+    incident.updated_at = utc_now()
+    log_audit(db, incident.incident_id, "Exported incident", actor_org_id=user.org_id)
+    db.add(incident)
+    db.commit()
+    db.refresh(incident)
+    record_timeline_event(
+        db=db,
+        request=request,
+        user=user,
+        incident=incident,
+        event_type="exported",
+        notes="Structured export generated",
+        event_data={"export_id": record.id},
+    )
+    return {"status": "exported", "export": payload, "export_id": record.id}
+
+
+@router.post("/incidents/{incident_id}/inventory_hooks", status_code=status.HTTP_201_CREATED)
+def create_inventory_hook(
+    incident_id: str,
+    payload: InventoryHookCreate,
+    request: Request,
+    db: Session = Depends(get_fire_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher)),
+):
+    incident = get_scoped_record(
+        db,
+        request,
+        FireIncident,
+        incident_id,
+        user,
+        id_field="incident_id",
+        resource_label="fire-incident",
+    )
+    enforce_legal_hold(db, user.org_id, "fire_incident", incident.incident_id, "inventory")
+    ensure_incident_editable(incident)
+    hook = FireInventoryHook(
+        org_id=user.org_id,
+        incident_id=incident.id,
+        incident_identifier=incident.incident_id,
+        equipment_type=payload.equipment_type,
+        quantity=payload.quantity,
+        usage_summary=payload.usage_summary,
+        notes=payload.notes,
+        reported_by=user.email,
+        payload=payload.payload,
+    )
+    apply_training_mode(hook, request)
+    db.add(hook)
+    db.commit()
+    db.refresh(hook)
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="create",
+        resource="fire_inventory_hook",
+        classification=hook.classification,
+        after_state=model_snapshot(hook),
+        event_type="inventory.fire.hook_recorded",
+        event_payload={
+            "incident_id": incident.incident_id,
+            "equipment": hook.equipment_type,
+            "quantity": hook.quantity,
+        },
+    )
+    record_timeline_event(
+        db=db,
+        request=request,
+        user=user,
+        incident=incident,
+        event_type="inventory_recorded",
+        notes="Equipment usage recorded",
+        event_data={"equipment": hook.equipment_type, "quantity": hook.quantity},
+    )
+    return model_snapshot(hook)
 
 
 @router.post("/incidents/{incident_id}/approval")
@@ -544,6 +1111,28 @@ def assign_apparatus(
             "apparatus_id": apparatus.id,
         },
     )
+    record_timeline_event(
+        db=db,
+        request=request,
+        user=user,
+        incident=incident,
+        event_type="unit_assigned",
+        notes="Apparatus assigned",
+        event_data={"apparatus_id": apparatus.id, "role": payload.role},
+    )
+    record_timeline_event(
+        db=db,
+        request=request,
+        user=user,
+        incident=incident,
+        event_type="unit_added",
+        notes="Apparatus added to incident",
+        event_data={
+            "assignment_id": assignment.id,
+            "apparatus_id": apparatus.id,
+            "role": payload.role,
+        },
+    )
     return assignment
 
 
@@ -598,7 +1187,149 @@ def assign_personnel(
             "personnel_id": personnel.id,
         },
     )
+    record_timeline_event(
+        db=db,
+        request=request,
+        user=user,
+        incident=incident,
+        event_type="unit_assigned",
+        notes="Personnel assigned",
+        event_data={"personnel_id": personnel.id, "role": payload.role},
+    )
+    record_timeline_event(
+        db=db,
+        request=request,
+        user=user,
+        incident=incident,
+        event_type="unit_added",
+        notes="Personnel added to incident",
+        event_data={
+            "assignment_id": assignment.id,
+            "personnel_id": personnel.id,
+            "role": payload.role,
+        },
+    )
     return assignment
+
+
+@router.delete("/incidents/{incident_id}/assign-apparatus/{assignment_id}")
+def remove_apparatus_assignment(
+    incident_id: str,
+    assignment_id: int,
+    request: Request,
+    db: Session = Depends(get_fire_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher)),
+):
+    incident = get_scoped_record(
+        db,
+        request,
+        FireIncident,
+        incident_id,
+        user,
+        id_field="incident_id",
+        resource_label="fire-incident",
+    )
+    ensure_incident_editable(incident)
+    assignment = (
+        scoped_query(db, FireIncidentApparatus, user.org_id, request.state.training_mode)
+        .filter(FireIncidentApparatus.id == assignment_id)
+        .first()
+    )
+    if not assignment or assignment.incident_id != incident.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found")
+    before = model_snapshot(assignment)
+    db.delete(assignment)
+    log_audit(db, incident.incident_id, "Removed apparatus", actor_org_id=user.org_id)
+    db.commit()
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="delete",
+        resource="fire_incident_apparatus",
+        classification=incident.classification,
+        before_state=before,
+        after_state={},
+        event_type="fire.incident.apparatus_removed",
+        event_payload={
+            "incident_id": incident.incident_id,
+            "assignment_id": assignment_id,
+            "apparatus_id": assignment.apparatus_id,
+        },
+    )
+    record_timeline_event(
+        db=db,
+        request=request,
+        user=user,
+        incident=incident,
+        event_type="unit_removed",
+        notes="Apparatus removed from incident",
+        event_data={
+            "assignment_id": assignment_id,
+            "apparatus_id": assignment.apparatus_id,
+        },
+    )
+    return {"status": "removed", "assignment_id": assignment_id}
+
+
+@router.delete("/incidents/{incident_id}/assign-personnel/{assignment_id}")
+def remove_personnel_assignment(
+    incident_id: str,
+    assignment_id: int,
+    request: Request,
+    db: Session = Depends(get_fire_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher)),
+):
+    incident = get_scoped_record(
+        db,
+        request,
+        FireIncident,
+        incident_id,
+        user,
+        id_field="incident_id",
+        resource_label="fire-incident",
+    )
+    ensure_incident_editable(incident)
+    assignment = (
+        scoped_query(db, FireIncidentPersonnel, user.org_id, request.state.training_mode)
+        .filter(FireIncidentPersonnel.id == assignment_id)
+        .first()
+    )
+    if not assignment or assignment.incident_id != incident.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found")
+    before = model_snapshot(assignment)
+    db.delete(assignment)
+    log_audit(db, incident.incident_id, "Removed personnel", actor_org_id=user.org_id)
+    db.commit()
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="delete",
+        resource="fire_incident_personnel",
+        classification=incident.classification,
+        before_state=before,
+        after_state={},
+        event_type="fire.incident.personnel_removed",
+        event_payload={
+            "incident_id": incident.incident_id,
+            "assignment_id": assignment_id,
+            "personnel_id": assignment.personnel_id,
+        },
+    )
+    record_timeline_event(
+        db=db,
+        request=request,
+        user=user,
+        incident=incident,
+        event_type="unit_removed",
+        notes="Personnel removed from incident",
+        event_data={
+            "assignment_id": assignment_id,
+            "personnel_id": assignment.personnel_id,
+        },
+    )
+    return {"status": "removed", "assignment_id": assignment_id}
 
 
 @router.get("/incidents/{incident_id}/assignments")
@@ -784,26 +1515,23 @@ def export_nfirs(
         "incident_id": payload.incident_id,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
-    record = FireExportRecord(
-        org_id=user.org_id,
-        export_type="NFIRS",
-        incident_id=payload.incident_id,
-        payload=json.dumps(export_payload),
-    )
-    apply_training_mode(record, request)
-    db.add(record)
-    db.commit()
-    db.refresh(record)
-    audit_and_event(
+    record = _persist_fire_export(
         db=db,
         request=request,
         user=user,
-        action="create",
-        resource="fire_export",
-        classification=record.classification,
-        after_state=model_snapshot(record),
+        incident=incident,
+        export_type="NFIRS",
+        payload=export_payload,
         event_type="fire.export.nfirs_created",
-        event_payload={"export_id": record.id, "export_type": "NFIRS", "incident_id": incident.incident_id},
+    )
+    _emit_export_generated_event(
+        db=db,
+        request=request,
+        user=user,
+        incident=incident,
+        export_type="NFIRS",
+        payload=export_payload,
+        record=record,
     )
     return {"status": "ok", "export": export_payload}
 
@@ -827,26 +1555,23 @@ def export_neris(
         "incident_id": payload.incident_id,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
-    record = FireExportRecord(
-        org_id=user.org_id,
-        export_type="NERIS",
-        incident_id=payload.incident_id,
-        payload=json.dumps(export_payload),
-    )
-    apply_training_mode(record, request)
-    db.add(record)
-    db.commit()
-    db.refresh(record)
-    audit_and_event(
+    record = _persist_fire_export(
         db=db,
         request=request,
         user=user,
-        action="create",
-        resource="fire_export",
-        classification=record.classification,
-        after_state=model_snapshot(record),
+        incident=incident,
+        export_type="NERIS",
+        payload=export_payload,
         event_type="fire.export.neris_created",
-        event_payload={"export_id": record.id, "export_type": "NERIS", "incident_id": incident.incident_id},
+    )
+    _emit_export_generated_event(
+        db=db,
+        request=request,
+        user=user,
+        incident=incident,
+        export_type="NERIS",
+        payload=export_payload,
+        record=record,
     )
     return {"status": "ok", "export": export_payload}
 
@@ -857,6 +1582,8 @@ def list_exports(
     db: Session = Depends(get_fire_db),
     user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher)),
 ):
-    return scoped_query(
-        db, FireExportRecord, user.org_id, request.state.training_mode
-    ).order_by(FireExportRecord.created_at.desc())
+    return (
+        scoped_query(db, FireExportRecord, user.org_id, request.state.training_mode)
+        .order_by(FireExportRecord.created_at.desc())
+        .all()
+    )

@@ -1,7 +1,7 @@
 from models.ai_console import AiInsight
 from models.ai_registry import AiOutputRegistry
 from models.automation import WorkflowRule, WorkflowTask
-from models.billing import BillingRecord
+from models.billing import BillingRecord, PriorAuthRequest
 from models.billing_accounts import (
     BillingCustomer,
     BillingInvoice,
@@ -9,6 +9,12 @@ from models.billing_accounts import (
     BillingLedgerEntry,
     BillingPayment,
     BillingWebhookReceipt,
+)
+from models.billing_ai import BillingAiInsight
+from models.billing_claims import (
+    BillingAssistResult,
+    BillingClaim,
+    BillingClaimExportSnapshot,
 )
 from models.billing_exports import (
     AppealPacket,
@@ -23,7 +29,15 @@ from models.billing_exports import (
 from models.builders import BuilderRegistry, BuilderChangeLog
 from models.business_ops import BusinessOpsTask
 from models.consent import ConsentProvenance
-from models.cad import Call, Dispatch, Unit
+from models.cad import (
+    Call,
+    Dispatch,
+    Unit,
+    CADIncident,
+    CADIncidentTimeline,
+    CrewLinkPage,
+)
+from models.mdt import MdtCadSyncEvent, MdtEvent, MdtObdIngest
 from models.compliance import AccessAudit, ComplianceAlert
 from models.communications import (
     CommsBroadcast,
@@ -54,6 +68,7 @@ from models.jobs import JobQueue, JobRun
 from models.organization import Organization
 from models.event import EventLog
 from models.module_registry import ModuleRegistry
+from models.transportlink import TransportLeg, TransportTrip
 from models.time import DeviceClockDrift
 from models.device_trust import DeviceTrust
 from models.legal import Addendum, LegalHold, OverrideRequest
@@ -68,6 +83,8 @@ from models.hems import (
     HemsIncidentLink,
     HemsMission,
     HemsMissionTimeline,
+    HemsFlightRequest,
+    HemsFlightRequestTimeline,
     HemsQualityReview,
     HemsRiskAssessment,
 )
@@ -76,8 +93,8 @@ from models.medication import MedicationAdministration, MedicationFormularyVersi
 from models.inventory import InventoryItem, InventoryMovement, InventoryRigCheck
 from models.fleet import FleetInspection, FleetMaintenance, FleetTelemetry, FleetVehicle
 from models.founder_ops import DataGovernanceRule, IncidentCommand, PricingPlan, PwaDistribution
-from models.exports import DataExportManifest, OrphanRepairAction
-from models.epcr import Patient, MasterPatient, MasterPatientLink, MasterPatientMerge
+from models.exports import CarefusionExportSnapshot, DataExportManifest, OrphanRepairAction
+from models.epcr import Patient, MasterPatient, MasterPatientLink, MasterPatientMerge, NEMSISValidationResult, PatientStateTimeline, NarrativeVersion
 from models.fire import (
     FireApparatus,
     FireApparatusInventory,
@@ -89,6 +106,8 @@ from models.fire import (
     FirePersonnel,
     FirePreventionRecord,
     FireTrainingRecord,
+    FireIncidentTimeline,
+    FireInventoryHook,
 )
 from models.legal_portal import LegalCase, LegalEvidence
 from models.patient_portal import PatientPortalAccount, PatientPortalMessage
@@ -110,6 +129,9 @@ from models.telehealth import TelehealthMessage, TelehealthParticipant, Teleheal
 from models.user import User, UserRole
 from models.validation import DataValidationIssue, ValidationRule
 from models.compliance import ForensicAuditLog
+from models.support import SupportInteraction, SupportMirrorEvent, SupportSession
+from models.notifications import InAppNotification, NotificationPreference
+from models.telnyx import TelnyxCallSummary, TelnyxFaxRecord
 
 __all__ = [
     "AiInsight",
@@ -117,6 +139,7 @@ __all__ = [
     "WorkflowRule",
     "WorkflowTask",
     "BillingRecord",
+    "PriorAuthRequest",
     "BillingCustomer",
     "BillingInvoice",
     "BillingInvoiceLine",
@@ -131,6 +154,10 @@ __all__ = [
     "PatientStatement",
     "PaymentPosting",
     "AppealPacket",
+    "BillingClaim",
+    "BillingAssistResult",
+    "BillingAiInsight",
+    "BillingClaimExportSnapshot",
     "BuilderRegistry",
     "BuilderChangeLog",
     "BusinessOpsTask",
@@ -138,6 +165,12 @@ __all__ = [
     "Call",
     "Dispatch",
     "Unit",
+    "CADIncident",
+    "CADIncidentTimeline",
+    "CrewLinkPage",
+    "MdtEvent",
+    "MdtObdIngest",
+    "MdtCadSyncEvent",
     "AccessAudit",
     "ForensicAuditLog",
     "ComplianceAlert",
@@ -171,6 +204,8 @@ __all__ = [
     "JobRun",
     "EventLog",
     "ModuleRegistry",
+    "TransportLeg",
+    "TransportTrip",
     "DeviceClockDrift",
     "DeviceTrust",
     "LegalHold",
@@ -182,6 +217,8 @@ __all__ = [
     "QARemediation",
     "HemsMission",
     "HemsMissionTimeline",
+    "HemsFlightRequest",
+    "HemsFlightRequestTimeline",
     "HemsAircraft",
     "HemsCrew",
     "HemsAssignment",
@@ -210,6 +247,7 @@ __all__ = [
     "DataGovernanceRule",
     "DataExportManifest",
     "OrphanRepairAction",
+    "CarefusionExportSnapshot",
     "Patient",
     "MasterPatient",
     "MasterPatientLink",
@@ -246,8 +284,17 @@ __all__ = [
     "FirePreventionRecord",
     "FireAuditLog",
     "FireExportRecord",
+    "FireIncidentTimeline",
+    "FireInventoryHook",
     "LegalCase",
     "LegalEvidence",
     "PatientPortalAccount",
     "PatientPortalMessage",
+    "SupportInteraction",
+    "SupportMirrorEvent",
+    "SupportSession",
+    "InAppNotification",
+    "NotificationPreference",
+    "TelnyxCallSummary",
+    "TelnyxFaxRecord",
 ]

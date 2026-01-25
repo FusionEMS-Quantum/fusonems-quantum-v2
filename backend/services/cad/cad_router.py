@@ -1,4 +1,6 @@
+from datetime import datetime
 from math import asin, cos, radians, sin, sqrt
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
@@ -7,9 +9,11 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.guards import require_module
 from core.security import require_roles
-from models.cad import Call, Dispatch, Unit
+from models.cad import CADIncident, CADIncidentTimeline, Call, Dispatch, Unit
 from models.user import User, UserRole
+from services.cad.helpers import record_mdt_sync_event
 from utils.logger import logger
+from utils.tenancy import get_scoped_record, scoped_query
 from utils.write_ops import apply_training_mode, audit_and_event, model_snapshot
 from utils.tenancy import get_scoped_record, scoped_query
 
@@ -46,6 +50,7 @@ class CallResponse(BaseModel):
 
 class UnitCreate(BaseModel):
     unit_identifier: str
+    unit_type: Literal["BLS", "ALS", "CCT"] = "BLS"
     status: str = "Available"
     latitude: float = 0.0
     longitude: float = 0.0
@@ -55,6 +60,28 @@ class DispatchRequest(BaseModel):
     call_id: int
     unit_identifier: str
 
+
+class UnitStatusUpdate(BaseModel):
+    status: Literal[
+        "available",
+        "assigned",
+        "enroute_to_pickup",
+        "on_scene",
+        "transporting",
+        "at_destination",
+    ]
+    latitude: float | None = None
+    longitude: float | None = None
+    notes: str | None = None
+
+
+UNIT_STATUS_TO_INCIDENT = {
+    "assigned": "assigned",
+    "enroute_to_pickup": "enroute_to_pickup",
+    "on_scene": "on_scene",
+    "transporting": "transporting",
+    "at_destination": "at_destination",
+}
 
 def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     radius_km = 6371.0
@@ -210,3 +237,93 @@ def dispatch_unit(
     )
     logger.info("Dispatching %s to call %s", unit.unit_identifier, call.id)
     return {"status": "dispatched", "eta_minutes": eta_minutes}
+
+
+@router.patch("/units/{unit_id}/status")
+def update_unit_status(
+    unit_id: int,
+    payload: UnitStatusUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher)),
+):
+    unit = get_scoped_record(db, request, Unit, unit_id, user, resource_label="cad_unit")
+    before_unit = model_snapshot(unit)
+    unit.status = payload.status
+    if payload.latitude is not None:
+        unit.latitude = payload.latitude
+    if payload.longitude is not None:
+        unit.longitude = payload.longitude
+    unit.last_update = datetime.utcnow()
+    apply_training_mode(unit, request)
+    db.add(unit)
+
+    incident = (
+        scoped_query(db, CADIncident, user.org_id, request.state.training_mode)
+        .filter(CADIncident.assigned_unit_id == unit.id)
+        .order_by(CADIncident.created_at.desc())
+        .first()
+    )
+    if incident and payload.status in UNIT_STATUS_TO_INCIDENT:
+        before_incident = model_snapshot(incident)
+        incident.status = UNIT_STATUS_TO_INCIDENT[payload.status]
+        incident.updated_at = datetime.utcnow()
+        timeline = CADIncidentTimeline(
+            org_id=incident.org_id,
+            incident_id=incident.id,
+            status=incident.status,
+            notes=payload.notes or "Unit status updated",
+            payload={
+                "unit_status": payload.status,
+                "latitude": payload.latitude,
+                "longitude": payload.longitude,
+            },
+            recorded_by_id=user.id,
+        )
+        apply_training_mode(timeline, request)
+        db.add(timeline)
+        audit_and_event(
+            db=db,
+            request=request,
+            user=user,
+            action="update",
+            resource="cad_incident",
+            classification=incident.classification,
+            before_state=before_incident,
+            after_state=model_snapshot(incident),
+            event_type="cad.incident.status.updated",
+            event_payload={"incident_id": incident.id, "status": incident.status},
+        )
+        record_mdt_sync_event(
+            db=db,
+            request=request,
+            user=user,
+            incident=incident,
+            event_type="cad.incident.status.updated",
+            payload={"status": incident.status, "actor_role": user.role},
+            unit_id=unit.id,
+        )
+
+    record_mdt_sync_event(
+        db=db,
+        request=request,
+        user=user,
+        incident=incident,
+        event_type="cad.unit.status",
+        payload={"unit_status": payload.status},
+        unit_id=unit.id,
+    )
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="update",
+        resource="cad_unit",
+        classification=unit.classification,
+        before_state=before_unit,
+        after_state=model_snapshot(unit),
+        event_type="cad.unit.status",
+        event_payload={"unit_id": unit.id, "status": unit.status},
+    )
+    db.commit()
+    return {"status": "ok"}

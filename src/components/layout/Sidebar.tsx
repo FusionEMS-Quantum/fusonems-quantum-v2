@@ -16,7 +16,8 @@ const navItems = [
   { label: "Comms Hub", href: "/comms", icon: "📞" },
   { label: "CrewLink", href: "/crewlink", icon: "🚑" },
   { label: "Inventory", href: "/inventory", icon: "📦" },
-  { label: "Founders", href: "/founders", icon: "🎛️" },
+  { label: "Founders", href: "/founder", icon: "🎛️" },
+  { label: "Support Studio", href: "/ops/support", icon: "🧑‍💻" },
 ]
 
 export default function Sidebar() {

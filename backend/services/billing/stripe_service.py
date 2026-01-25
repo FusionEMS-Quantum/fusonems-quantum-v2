@@ -18,23 +18,23 @@ from utils.write_ops import audit_and_event, model_snapshot
 
 
 PRICE_TO_MODULE = {
-    settings.STRIPE_PRICE_ID_CAD: "CAD",
-    settings.STRIPE_PRICE_ID_EPCR: "EPCR",
-    settings.STRIPE_PRICE_ID_BILLING: "BILLING",
-    settings.STRIPE_PRICE_ID_COMMS: "COMMS",
-    settings.STRIPE_PRICE_ID_SCHEDULING: "SCHEDULING",
-    settings.STRIPE_PRICE_ID_FIRE: "FIRE",
-    settings.STRIPE_PRICE_ID_HEMS: "HEMS",
-    settings.STRIPE_PRICE_ID_INVENTORY: "INVENTORY",
-    settings.STRIPE_PRICE_ID_TRAINING: "TRAINING",
-    settings.STRIPE_PRICE_ID_QA_LEGAL: "COMPLIANCE",
+    settings.stripe_price_id_cad: "CAD",
+    settings.stripe_price_id_epcr: "EPCR",
+    settings.stripe_price_id_billing: "BILLING",
+    settings.stripe_price_id_comms: "COMMS",
+    settings.stripe_price_id_scheduling: "SCHEDULING",
+    settings.stripe_price_id_fire: "FIRE",
+    settings.stripe_price_id_hems: "HEMS",
+    settings.stripe_price_id_inventory: "INVENTORY",
+    settings.stripe_price_id_training: "TRAINING",
+    settings.stripe_price_id_qa_legal: "COMPLIANCE",
 }
 
 
 def _set_stripe_key() -> None:
-    if not settings.STRIPE_SECRET_KEY:
+    if not settings.stripe_secret_key:
         raise RuntimeError("STRIPE_SECRET_KEY missing")
-    stripe.api_key = settings.STRIPE_SECRET_KEY
+    stripe.api_key = settings.stripe_secret_key
 
 
 def payload_hash(raw: bytes) -> str:
@@ -95,7 +95,7 @@ def upsert_feature_flags(db: Session, org_id: int, subscription_items: list[dict
             db.add(flag)
         else:
             flag.enabled = enabled
-        if settings.STRIPE_ENFORCE_ENTITLEMENTS:
+        if getattr(settings, 'stripe_enforce_entitlements', False):
             module = (
                 db.query(ModuleRegistry)
                 .filter(ModuleRegistry.org_id == org_id, ModuleRegistry.module_key == module_key)

@@ -64,12 +64,12 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     signature = request.headers.get("stripe-signature", "")
     signature_valid = False
 
-    if settings.STRIPE_WEBHOOK_SECRET:
+    if settings.stripe_webhook_secret:
         try:
             event = stripe.Webhook.construct_event(
                 payload=raw_body,
                 sig_header=signature,
-                secret=settings.STRIPE_WEBHOOK_SECRET,
+                secret=settings.stripe_webhook_secret,
             )
             signature_valid = True
         except Exception as exc:  # noqa: BLE001

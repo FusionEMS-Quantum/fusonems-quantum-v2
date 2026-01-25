@@ -75,7 +75,12 @@ def _verify_telnyx_signature(raw_body: bytes, request: Request) -> None:
     try:
         from nacl.encoding import Base64Encoder
         from nacl.signing import VerifyKey
-
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_412_PRECONDITION_FAILED,
+            detail="PyNaCl is required for Telnyx signature verification",
+        ) from exc
+    try:
         verify_key = VerifyKey(settings.TELNYX_PUBLIC_KEY, encoder=Base64Encoder)
         signed_payload = f"{timestamp}.{raw_body.decode('utf-8')}".encode("utf-8")
         verify_key.verify(signed_payload, Base64Encoder.decode(signature))

@@ -1,0 +1,66 @@
+from __future__ import annotations
+
+import os
+from typing import Optional, List
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+def _in_docker() -> bool:
+    return os.path.exists("/.dockerenv") or os.environ.get("IN_DOCKER") == "1"
+
+def _sanitize_database_url(url: str) -> str:
+    # Replace placeholders used in chat history
+    if "<droplet-ip>" in url:
+        url = url.replace("<droplet-ip>", "db" if _in_docker() else "127.0.0.1")
+    # If any angle brackets remain, fail fast (prevents psycopg2 hostname translation errors)
+    if "<" in url or ">" in url:
+        raise ValueError(f"Invalid DATABASE_URL (contains placeholder brackets): {url}")
+    return url
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="allow")
+
+    ENV: str = Field(default="development")
+    DATABASE_URL: str = Field(default="sqlite:///./fusonems.db")
+
+    # DB pool settings for Postgres (ignored for sqlite)
+    DB_POOL_SIZE: int = Field(default=5)
+    DB_MAX_OVERFLOW: int = Field(default=10)
+
+    # Auth
+    JWT_SECRET_KEY: str = Field(default="change-me")
+    JWT_ALGORITHM: str = Field(default="HS256")
+    JWT_EXPIRES_MINUTES: int = Field(default=60 * 24)
+
+    # CORS
+    ALLOWED_ORIGINS: str = Field(default="*")
+
+    # Vendors (optional until enabled)
+    TELNYX_API_KEY: str = Field(default="")
+    TELNYX_FROM_NUMBER: str = Field(default="")
+    POSTMARK_SERVER_TOKEN: str = Field(default="")
+
+    # Feature flags
+    OIDC_ENABLED: bool = Field(default=False)
+
+    def normalized_database_url(self) -> str:
+        return _sanitize_database_url(self.DATABASE_URL)
+
+    def allowed_origins_list(self) -> List[str]:
+        if self.ALLOWED_ORIGINS.strip() == "*":
+            return ["*"]
+        return [x.strip() for x in self.ALLOWED_ORIGINS.split(",") if x.strip()]
+
+settings = Settings()
+
+def validate_settings_runtime(s: Optional[Settings] = None) -> None:
+    s = s or settings
+    # Always validate DB URL placeholders
+    _ = s.normalized_database_url()
+
+    # Production invariants
+    if s.ENV.lower() == "production":
+        if not s.DATABASE_URL or s.DATABASE_URL.startswith("sqlite"):
+            raise RuntimeError("ENV=production requires a real Postgres DATABASE_URL")
+        if not s.JWT_SECRET_KEY or s.JWT_SECRET_KEY == "change-me":
+            raise RuntimeError("ENV=production requires JWT_SECRET_KEY to be set")

@@ -1,38 +1,48 @@
-version: '3.9'
 services:
   db:
     image: postgres:16
-    restart: unless-stopped
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: securepass
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
       POSTGRES_DB: fusonems
     ports:
       - "5432:5432"
-    volumes:
-      - fusonems_db:/var/lib/postgresql/data
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    command: start-dev
     environment:
-      DATABASE_URL: postgresql://admin:securepass@db:5432/fusonems
-      ALLOWED_ORIGINS: http://localhost:5173
-      JWT_SECRET_KEY: change-me
+      KC_DB: dev-file
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
     ports:
-      - "8000:8080"
+      - "8080:8080"
+
+  backend:
+    env_file:
+      - backend/.env
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/fusonems
+      ENV: development
+      JWT_SECRET_KEY: change-me
+      STORAGE_ENCRYPTION_KEY: change-me
+      DOCS_ENCRYPTION_KEY: change-me
     depends_on:
       - db
+      - keycloak
+    ports:
+      - "8000:8000"
+
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend.Dockerfile
     environment:
-      VITE_API_URL: http://localhost:8000
-    ports:
-      - "5173:8080"
+      NEXT_PUBLIC_API_URL: http://backend:8000
     depends_on:
       - backend
-
-volumes:
-  fusonems_db:
+    ports:
+      - "5173:3000"

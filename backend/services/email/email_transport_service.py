@@ -181,3 +181,45 @@ def send_outbound(
         event_payload={"message_id": message.id, "postmark_id": message.postmark_message_id},
     )
     return {"message": model_snapshot(message), "decision": decision}
+
+
+def send_postmark_email(
+    to: str,
+    subject: str,
+    html_body: str,
+    reply_to: str | None = None,
+    cc: list[str] | None = None,
+    bcc: list[str] | None = None,
+    text_body: str | None = None,
+    message_stream: str = "outbound",
+) -> dict[str, str]:
+    if settings.POSTMARK_SEND_DISABLED:
+        return {"status": "disabled"}
+    if not settings.POSTMARK_SERVER_TOKEN:
+        raise HTTPException(status_code=412, detail="Postmark server token not configured")
+    headers = {
+        "X-Postmark-Server-Token": settings.POSTMARK_SERVER_TOKEN,
+        "Content-Type": "application/json",
+    }
+    payload_data = {
+        "From": reply_to or settings.POSTMARK_DEFAULT_SENDER,
+        "To": to,
+        "Subject": subject,
+        "HtmlBody": html_body,
+        "TextBody": text_body or html_body,
+        "MessageStream": message_stream,
+    }
+    if cc:
+        payload_data["Cc"] = ",".join(cc)
+    if bcc:
+        payload_data["Bcc"] = ",".join(bcc)
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            response = client.post(f"{settings.POSTMARK_API_BASE}/email", json=payload_data, headers=headers)
+        if response.status_code >= 400:
+            raise HTTPException(status_code=502, detail="Postmark notify failed")
+        return response.json()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Postmark notify failed") from exc

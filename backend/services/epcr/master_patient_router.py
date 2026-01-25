@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.guards import require_module
 from core.security import require_roles
-from models.epcr import MasterPatient, MasterPatientMerge
+from models.epcr import MasterPatient, MasterPatientLink, MasterPatientMerge
 from models.user import User, UserRole
 from utils.tenancy import get_scoped_record
 from utils.write_ops import apply_training_mode, audit_and_event, model_snapshot
@@ -102,8 +102,25 @@ def merge_master_patient(
     )
     if from_patient.id == to_patient.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot merge into itself")
+    if to_patient.merged_into_id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Target master patient already merged")
     if from_patient.merged_into_id:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Source master patient already merged")
+    before_links = [
+        {
+            "link_id": link.id,
+            "epcr_patient_id": link.epcr_patient_id,
+            "master_patient_id": link.master_patient_id,
+        }
+        for link in db.query(MasterPatientLink)
+        .filter(MasterPatientLink.master_patient_id == from_patient.id)
+        .all()
+    ]
+    before_state = {
+        "from_master_patient": model_snapshot(from_patient),
+        "to_master_patient": model_snapshot(to_patient),
+        "links": before_links,
+    }
     merge = MasterPatientMerge(
         org_id=user.org_id,
         from_id=from_patient.id,
@@ -112,10 +129,30 @@ def merge_master_patient(
         actor=str(user.id),
     )
     from_patient.merged_into_id = to_patient.id
+    for link in db.query(MasterPatientLink).filter(MasterPatientLink.master_patient_id == from_patient.id).all():
+        link.master_patient_id = to_patient.id
     apply_training_mode(merge, request)
     db.add(merge)
     db.commit()
     db.refresh(merge)
+    db.refresh(from_patient)
+    db.refresh(to_patient)
+    after_links = [
+        {
+            "link_id": link.id,
+            "epcr_patient_id": link.epcr_patient_id,
+            "master_patient_id": link.master_patient_id,
+        }
+        for link in db.query(MasterPatientLink)
+        .filter(MasterPatientLink.master_patient_id == to_patient.id)
+        .all()
+    ]
+    after_state = {
+        "from_master_patient": model_snapshot(from_patient),
+        "to_master_patient": model_snapshot(to_patient),
+        "links": after_links,
+        "merge_record": model_snapshot(merge),
+    }
     audit_and_event(
         db=db,
         request=request,
@@ -123,7 +160,8 @@ def merge_master_patient(
         action="merge",
         resource="master_patient_merge",
         classification=to_patient.classification,
-        after_state=model_snapshot(merge),
+        before_state=before_state,
+        after_state=after_state,
         event_type="epcr.master_patient.merged",
         event_payload={
             "from_master_patient_id": from_patient.id,

@@ -58,13 +58,26 @@ npm run dev
 ```
 
 ## Environment
-Copy `.env.template` and populate the values.
+Copy `.env.example` and populate the values.
 
 ```bash
-cp .env.template backend/.env
+cp backend/.env.example backend/.env
 ```
 
-Set `VITE_API_URL` in `frontend/.env` (or your hosting platform) for API integration.
+Set `NEXT_PUBLIC_API_URL` in `frontend/.env.local` (or your hosting platform) for API integration, e.g. `NEXT_PUBLIC_API_URL=http://localhost:8000`.
+
+## Docker Compose
+Use `docker compose` to orchestrate the database, Keycloak, backend, and frontend.
+
+```bash
+docker compose down -v
+docker compose up -d --build
+docker compose logs backend --tail=100
+curl -sf http://127.0.0.1:8000/healthz
+docker compose exec backend sh -c "cd /app/backend && alembic upgrade head"
+```
+
+When migration failures report `DuplicateTable`, run `scripts/docker_migrate.sh` (it stamps to the head revision before retrying the upgrade).
 
 ## Tests
 ### Backend

@@ -52,6 +52,8 @@ class HemsAircraft(HemsBase):
     tail_number = Column(String, nullable=False, unique=True)
     capability_flags = Column(JSON, nullable=False, default=dict)
     availability = Column(String, default="Available")
+    availability_status = Column(String, default="Available")
+    base = Column(String, default="")
     maintenance_status = Column(String, default="Green")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -67,7 +69,10 @@ class HemsCrew(HemsBase):
     full_name = Column(String, nullable=False)
     role = Column(String, nullable=False)
     duty_status = Column(String, default="Ready")
+    current_status = Column(String, default="Ready")
     readiness_flags = Column(JSON, nullable=False, default=dict)
+    duty_start = Column(DateTime(timezone=True), nullable=True)
+    duty_end = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -163,6 +168,45 @@ class HemsIncidentLink(HemsBase):
     ground_incident_id = Column(String, default="")
     epcr_id = Column(String, default="")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class HemsFlightRequest(HemsBase):
+    __tablename__ = "hems_flight_requests"
+    __table_args__ = SCHEMA_ARGS
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, nullable=False, index=True)
+    classification = Column(String, default="AVIATION_SAFETY")
+    training_mode = Column(Boolean, default=False)
+    request_source = Column(String, nullable=False)
+    requesting_facility = Column(String, nullable=False)
+    sending_location = Column(String, nullable=False)
+    receiving_facility = Column(String, nullable=False)
+    patient_summary = Column(Text, default="")
+    priority = Column(String, default="Routine")
+    status = Column(String, default="requested")
+    crew_id = Column(Integer, ForeignKey(f"{SCHEMA_PREFIX}hems_crew.id"), nullable=True)
+    aircraft_id = Column(Integer, ForeignKey(f"{SCHEMA_PREFIX}hems_aircraft.id"), nullable=True)
+    linked_cad_incident_id = Column(Integer, nullable=True)
+    linked_epcr_patient_id = Column(Integer, nullable=True)
+    request_notes = Column(Text, default="")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class HemsFlightRequestTimeline(HemsBase):
+    __tablename__ = "hems_flight_request_timeline"
+    __table_args__ = SCHEMA_ARGS
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, nullable=False, index=True)
+    classification = Column(String, default="AVIATION_SAFETY")
+    training_mode = Column(Boolean, default=False)
+    flight_request_id = Column(Integer, ForeignKey(f"{SCHEMA_PREFIX}hems_flight_requests.id"), nullable=False)
+    event_type = Column(String, nullable=False)
+    notes = Column(Text, default="")
+    payload = Column(JSON, nullable=False, default=dict)
+    recorded_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class HemsQualityReview(HemsBase):

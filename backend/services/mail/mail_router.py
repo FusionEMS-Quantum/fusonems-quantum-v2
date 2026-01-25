@@ -39,10 +39,16 @@ def _send_telnyx_message(payload: MessageCreate) -> str:
 
     telnyx.api_key = settings.TELNYX_API_KEY
     channel = payload.channel.lower()
+    from_number = settings.TELNYX_FROM_NUMBER or settings.TELNYX_NUMBER
+    if not from_number:
+        raise HTTPException(
+            status_code=status.HTTP_412_PRECONDITION_FAILED,
+            detail="Telnyx sender number not configured",
+        )
 
     if channel == "sms":
         response = telnyx.Message.create(
-            from_=settings.TELNYX_NUMBER,
+            from_=from_number,
             to=payload.recipient,
             text=payload.body,
             messaging_profile_id=settings.TELNYX_MESSAGING_PROFILE_ID or None,
@@ -52,7 +58,7 @@ def _send_telnyx_message(payload: MessageCreate) -> str:
         response = telnyx.Call.create(
             connection_id=settings.TELNYX_CONNECTION_ID,
             to=payload.recipient,
-            from_=settings.TELNYX_NUMBER,
+            from_=from_number,
         )
         return response.id
     if channel == "fax":
@@ -64,7 +70,7 @@ def _send_telnyx_message(payload: MessageCreate) -> str:
         response = telnyx.Fax.create(
             connection_id=settings.TELNYX_CONNECTION_ID,
             to=payload.recipient,
-            from_=settings.TELNYX_NUMBER,
+            from_=from_number,
             media_url=payload.media_url,
         )
         return response.id

@@ -2,6 +2,8 @@ from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, Str
 
 from core.database import Base
 
+from models.telehealth import TelehealthSession
+
 
 class DataExportManifest(Base):
     __tablename__ = "data_export_manifests"
@@ -26,4 +28,23 @@ class OrphanRepairAction(Base):
     orphan_id = Column(String, nullable=False)
     action = Column(String, nullable=False)
     details = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class CarefusionExportSnapshot(Base):
+    __tablename__ = "carefusion_export_snapshots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    epcr_patient_id = Column(Integer, ForeignKey("epcr_patients.id"), nullable=True, index=True)
+    telehealth_session_uuid = Column(
+        String,
+        ForeignKey(TelehealthSession.session_uuid),
+        nullable=True,
+        index=True,
+    )
+    classification = Column(String, default="BILLING_SENSITIVE")
+    training_mode = Column(Boolean, default=False)
+    payload = Column(JSON, nullable=False, default=dict)
+    exported_at = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())

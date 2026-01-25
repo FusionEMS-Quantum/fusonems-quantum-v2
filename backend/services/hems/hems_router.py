@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from core.database import get_hems_db
 from core.guards import require_module
 from core.security import require_roles, require_on_shift, require_trusted_device
+from core.config import settings
 from models.hems import (
     HemsAircraft,
     HemsAssignment,
@@ -20,6 +21,7 @@ from models.hems import (
     HemsQualityReview,
     HemsRiskAssessment,
 )
+from models.hems import HemsFlightRequest, HemsFlightRequestTimeline
 from models.user import User, UserRole
 from utils.ai_registry import register_ai_output
 from utils.legal import enforce_legal_hold
@@ -28,6 +30,7 @@ from utils.time import utc_now
 from utils.write_ops import apply_training_mode, audit_and_event, model_snapshot
 from utils.workflows import upsert_workflow_state
 from models.hems import HemsMissionTimeline
+from services.cad.helpers import record_cad_timeline_event
 
 router = APIRouter(
     prefix="/api/hems",
@@ -115,6 +118,123 @@ class HemsQAResolve(BaseModel):
     notes: str = ""
 
 
+class FlightRequestCreate(BaseModel):
+    request_source: str
+    requesting_facility: str
+    sending_location: str
+    receiving_facility: str
+    patient_summary: str = ""
+    priority: str = "Routine"
+    linked_cad_incident_id: int | None = None
+    linked_epcr_patient_id: int | None = None
+    request_notes: str = ""
+
+
+class FlightRequestUpdate(BaseModel):
+    patient_summary: str | None = None
+    priority: str | None = None
+    request_notes: str | None = None
+    linked_cad_incident_id: int | None = None
+    linked_epcr_patient_id: int | None = None
+
+
+class FlightRequestAction(BaseModel):
+    crew_id: int | None = None
+    aircraft_id: int | None = None
+    notes: str = ""
+
+
+class CrewDutyUpdate(BaseModel):
+    current_status: str
+    duty_start: datetime | None = None
+    duty_end: datetime | None = None
+
+
+class AircraftStatusUpdate(BaseModel):
+    availability_status: str | None = None
+    maintenance_status: str | None = None
+    base: str | None = None
+
+
+def _record_flight_request_timeline(
+    db: Session,
+    request: Request,
+    user: User,
+    flight_request: HemsFlightRequest,
+    event_type: str,
+    notes: str = "",
+    payload: dict | None = None,
+) -> HemsFlightRequestTimeline:
+    entry = HemsFlightRequestTimeline(
+        org_id=user.org_id,
+        flight_request_id=flight_request.id,
+        event_type=event_type,
+        notes=notes,
+        payload=payload or {},
+    )
+    apply_training_mode(entry, request)
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="timeline",
+        resource="hems_flight_request_timeline",
+        classification=entry.classification,
+        after_state=model_snapshot(entry),
+        event_type=f"hems.flight_request.timeline.{event_type}",
+        event_payload={"flight_request_id": flight_request.id, "event": event_type},
+        schema_name="hems",
+    )
+    return entry
+
+
+def _emit_cad_hems_event(
+    db: Session,
+    request: Request,
+    user: User,
+    flight_request: HemsFlightRequest,
+    event_type: str,
+    notes: str,
+) -> None:
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="emit",
+        resource="hems_flight_request",
+        classification=flight_request.classification,
+        after_state=model_snapshot(flight_request),
+        event_type=event_type,
+        event_payload={
+            "flight_request_id": flight_request.id,
+            "status": flight_request.status,
+            "cad_incident_id": flight_request.linked_cad_incident_id,
+            "notes": notes,
+        },
+        schema_name="cad",
+    )
+
+
+def _crew_is_available(crew: HemsCrew, now: datetime) -> tuple[bool, str]:
+    status = (crew.current_status or crew.duty_status or "").lower()
+    if "off" in status:
+        return False, "Crew off-duty"
+    if not crew.duty_start:
+        return False, "Crew duty start not recorded"
+    if crew.duty_end and crew.duty_end <= now:
+        return False, "Crew already signed off"
+    max_hours = getattr(settings, "HEMS_MAX_DUTY_HOURS", 12)
+    try:
+        max_hours = float(max_hours)
+    except (TypeError, ValueError):
+        max_hours = 12
+    elapsed_hours = (now - crew.duty_start).total_seconds() / 3600
+    if elapsed_hours > max_hours:
+        return False, f"Crew exceeded {max_hours:.1f}h duty window"
+    return True, ""
 @router.post("/missions", status_code=status.HTTP_201_CREATED)
 def create_mission(
     payload: MissionCreate,
@@ -602,6 +722,490 @@ def link_ground(
         schema_name="hems",
     )
     return link
+
+
+@router.post("/requests", status_code=status.HTTP_201_CREATED)
+def create_flight_request(
+    payload: FlightRequestCreate,
+    request: Request,
+    db: Session = Depends(get_hems_db),
+    user: User = Depends(
+        require_roles(
+            UserRole.admin,
+            UserRole.dispatcher,
+            UserRole.hems_supervisor,
+        )
+    ),
+):
+    flight_request = HemsFlightRequest(
+        org_id=user.org_id,
+        request_source=payload.request_source,
+        requesting_facility=payload.requesting_facility,
+        sending_location=payload.sending_location,
+        receiving_facility=payload.receiving_facility,
+        patient_summary=payload.patient_summary,
+        priority=payload.priority,
+        request_notes=payload.request_notes,
+        linked_cad_incident_id=payload.linked_cad_incident_id,
+        linked_epcr_patient_id=payload.linked_epcr_patient_id,
+    )
+    apply_training_mode(flight_request, request)
+    db.add(flight_request)
+    db.commit()
+    db.refresh(flight_request)
+    _record_flight_request_timeline(
+        db=db,
+        request=request,
+        user=user,
+        flight_request=flight_request,
+        event_type="created",
+        notes="Flight request created",
+    )
+    return model_snapshot(flight_request)
+
+
+@router.get("/requests")
+def list_flight_requests(
+    request: Request,
+    db: Session = Depends(get_hems_db),
+    user: User = Depends(require_roles()),
+):
+    return scoped_query(
+        db, HemsFlightRequest, user.org_id, request.state.training_mode
+    ).order_by(HemsFlightRequest.created_at.desc()).all()
+
+
+@router.get("/requests/{request_id}")
+def get_flight_request(
+    request_id: int,
+    request: Request,
+    db: Session = Depends(get_hems_db),
+    user: User = Depends(require_roles()),
+):
+    return get_scoped_record(
+        db,
+        request,
+        HemsFlightRequest,
+        request_id,
+        user,
+        resource_label="hems_flight_request",
+    )
+
+
+@router.patch("/requests/{request_id}")
+def update_flight_request(
+    request_id: int,
+    payload: FlightRequestUpdate,
+    request: Request,
+    db: Session = Depends(get_hems_db),
+    user: User = Depends(
+        require_roles(
+            UserRole.admin,
+            UserRole.hems_supervisor,
+            UserRole.dispatcher,
+        )
+    ),
+):
+    flight_request = get_scoped_record(
+        db,
+        request,
+        HemsFlightRequest,
+        request_id,
+        user,
+        resource_label="hems_flight_request",
+    )
+    before = model_snapshot(flight_request)
+    updates = payload.model_dump(exclude_none=True)
+    for key, value in updates.items():
+        setattr(flight_request, key, value)
+    flight_request.updated_at = utc_now()
+    db.commit()
+    db.refresh(flight_request)
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="update",
+        resource="hems_flight_request",
+        classification=flight_request.classification,
+        before_state=before,
+        after_state=model_snapshot(flight_request),
+        event_type="hems.flight_request.updated",
+        event_payload={"flight_request_id": flight_request.id},
+        schema_name="hems",
+    )
+    _record_flight_request_timeline(
+        db=db,
+        request=request,
+        user=user,
+        flight_request=flight_request,
+        event_type="updated",
+        notes="Flight request updated",
+        payload={"fields": list(updates.keys())},
+    )
+    return flight_request
+
+
+@router.get("/requests/{request_id}/timeline")
+def flight_request_timeline(
+    request_id: int,
+    request: Request,
+    db: Session = Depends(get_hems_db),
+    user: User = Depends(require_roles()),
+):
+    flight_request = get_scoped_record(
+        db,
+        request,
+        HemsFlightRequest,
+        request_id,
+        user,
+        resource_label="hems_flight_request",
+    )
+    return (
+        scoped_query(
+            db, HemsFlightRequestTimeline, user.org_id, request.state.training_mode
+        )
+        .filter(HemsFlightRequestTimeline.flight_request_id == flight_request.id)
+        .order_by(HemsFlightRequestTimeline.recorded_at.asc())
+        .all()
+    )
+
+
+def _fetch_crew(db: Session, user: User, crew_id: int, training_mode: bool):
+    crew = scoped_query(db, HemsCrew, user.org_id, training_mode).filter(
+        HemsCrew.id == crew_id
+    ).first()
+    if not crew:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Crew not found")
+    return crew
+
+
+def _fetch_aircraft(db: Session, user: User, aircraft_id: int, training_mode: bool):
+    aircraft = scoped_query(db, HemsAircraft, user.org_id, training_mode).filter(
+        HemsAircraft.id == aircraft_id
+    ).first()
+    if not aircraft:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aircraft not found")
+    return aircraft
+
+
+@router.post("/requests/{request_id}/accept")
+def accept_flight_request(
+    request_id: int,
+    payload: FlightRequestAction,
+    request: Request,
+    db: Session = Depends(get_hems_db),
+    user: User = Depends(
+        require_roles(
+            UserRole.admin,
+            UserRole.hems_supervisor,
+            UserRole.pilot,
+            UserRole.flight_nurse,
+            UserRole.flight_medic,
+        )
+    ),
+):
+    flight_request = get_scoped_record(
+        db,
+        request,
+        HemsFlightRequest,
+        request_id,
+        user,
+        resource_label="hems_flight_request",
+    )
+    if flight_request.status not in {"requested", "declined"}:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot accept in current state")
+    now = utc_now()
+    crew = _fetch_crew(db, user, payload.crew_id, request.state.training_mode) if payload.crew_id else None
+    if not crew:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Crew required")
+    available, reason = _crew_is_available(crew, now)
+    if not available:
+        _record_flight_request_timeline(
+            db=db,
+            request=request,
+            user=user,
+            flight_request=flight_request,
+            event_type="accept_refused",
+            notes=reason,
+        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=reason)
+    aircraft = None
+    if payload.aircraft_id:
+        aircraft = _fetch_aircraft(db, user, payload.aircraft_id, request.state.training_mode)
+        if aircraft.availability_status.lower() != "available":
+            reason = "Aircraft unavailable"
+            _record_flight_request_timeline(
+                db=db,
+                request=request,
+                user=user,
+                flight_request=flight_request,
+                event_type="accept_refused",
+                notes=reason,
+            )
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=reason)
+        aircraft.availability_status = "Assigned"
+        db.add(aircraft)
+    flight_request.status = "accepted"
+    flight_request.crew_id = crew.id
+    flight_request.aircraft_id = aircraft.id if aircraft else flight_request.aircraft_id
+    flight_request.request_notes = payload.notes or flight_request.request_notes
+    flight_request.updated_at = now
+    crew.current_status = "Active"
+    crew.duty_status = crew.current_status
+    db.add(crew)
+    db.commit()
+    db.refresh(flight_request)
+    _record_flight_request_timeline(
+        db=db,
+        request=request,
+        user=user,
+        flight_request=flight_request,
+        event_type="accepted",
+        notes="Flight request accepted",
+    )
+    _emit_cad_hems_event(
+        db=db,
+        request=request,
+        user=user,
+        flight_request=flight_request,
+        event_type="cad.hems.request.accepted",
+        notes="Flight request accepted",
+    )
+    if flight_request.linked_cad_incident_id:
+        record_cad_timeline_event(
+            db=db,
+            request=request,
+            user=user,
+            cad_incident_id=flight_request.linked_cad_incident_id,
+            status="hems.accepted",
+            notes="HEMS flight request accepted",
+            payload={"flight_request_id": flight_request.id},
+        )
+    return flight_request
+
+
+@router.post("/requests/{request_id}/decline")
+def decline_flight_request(
+    request_id: int,
+    payload: FlightRequestAction,
+    request: Request,
+    db: Session = Depends(get_hems_db),
+    user: User = Depends(
+        require_roles(
+            UserRole.admin,
+            UserRole.hems_supervisor,
+            UserRole.dispatcher,
+        )
+    ),
+):
+    flight_request = get_scoped_record(
+        db,
+        request,
+        HemsFlightRequest,
+        request_id,
+        user,
+        resource_label="hems_flight_request",
+    )
+    flight_request.status = "declined"
+    flight_request.request_notes = payload.notes or flight_request.request_notes
+    flight_request.updated_at = utc_now()
+    db.commit()
+    db.refresh(flight_request)
+    _record_flight_request_timeline(
+        db=db,
+        request=request,
+        user=user,
+        flight_request=flight_request,
+        event_type="declined",
+        notes=payload.notes or "Flight request declined",
+    )
+    return flight_request
+
+
+@router.post("/requests/{request_id}/launch")
+def launch_flight_request(
+    request_id: int,
+    payload: FlightRequestAction,
+    request: Request,
+    db: Session = Depends(get_hems_db),
+    user: User = Depends(
+        require_roles(
+            UserRole.admin,
+            UserRole.hems_supervisor,
+            UserRole.pilot,
+        )
+    ),
+):
+    flight_request = get_scoped_record(
+        db,
+        request,
+        HemsFlightRequest,
+        request_id,
+        user,
+        resource_label="hems_flight_request",
+    )
+    if flight_request.status != "accepted":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only accepted requests can launch")
+    flight_request.status = "launched"
+    flight_request.request_notes = payload.notes or flight_request.request_notes
+    flight_request.updated_at = utc_now()
+    db.commit()
+    db.refresh(flight_request)
+    _record_flight_request_timeline(
+        db=db,
+        request=request,
+        user=user,
+        flight_request=flight_request,
+        event_type="launched",
+        notes="Flight request launched",
+    )
+    _emit_cad_hems_event(
+        db=db,
+        request=request,
+        user=user,
+        flight_request=flight_request,
+        event_type="cad.hems.request.launched",
+        notes="Flight request launched",
+    )
+    if flight_request.linked_cad_incident_id:
+        record_cad_timeline_event(
+            db=db,
+            request=request,
+            user=user,
+            cad_incident_id=flight_request.linked_cad_incident_id,
+            status="hems.launched",
+            notes="HEMS flight request launched",
+            payload={"flight_request_id": flight_request.id},
+        )
+    return flight_request
+
+
+@router.post("/requests/{request_id}/complete")
+def complete_flight_request(
+    request_id: int,
+    payload: FlightRequestAction,
+    request: Request,
+    db: Session = Depends(get_hems_db),
+    user: User = Depends(
+        require_roles(
+            UserRole.admin,
+            UserRole.hems_supervisor,
+            UserRole.flight_nurse,
+            UserRole.flight_medic,
+        )
+    ),
+):
+    flight_request = get_scoped_record(
+        db,
+        request,
+        HemsFlightRequest,
+        request_id,
+        user,
+        resource_label="hems_flight_request",
+    )
+    flight_request.status = "complete"
+    flight_request.request_notes = payload.notes or flight_request.request_notes
+    flight_request.updated_at = utc_now()
+    db.commit()
+    db.refresh(flight_request)
+    _record_flight_request_timeline(
+        db=db,
+        request=request,
+        user=user,
+        flight_request=flight_request,
+        event_type="completed",
+        notes="Flight request completed",
+    )
+    return flight_request
+
+
+@router.patch("/crew/{crew_id}")
+def update_crew_duty_status(
+    crew_id: int,
+    payload: CrewDutyUpdate,
+    request: Request,
+    db: Session = Depends(get_hems_db),
+    user: User = Depends(
+        require_roles(
+            UserRole.admin,
+            UserRole.hems_supervisor,
+        )
+    ),
+):
+    crew = _fetch_crew(db, user, crew_id, request.state.training_mode)
+    before = model_snapshot(crew)
+    crew.current_status = payload.current_status
+    crew.duty_start = payload.duty_start
+    crew.duty_end = payload.duty_end
+    db.commit()
+    db.refresh(crew)
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="update",
+        resource="hems_crew",
+        classification=crew.classification,
+        before_state=before,
+        after_state=model_snapshot(crew),
+        event_type="hems.crew.updated",
+        event_payload={"crew_id": crew.id},
+        schema_name="hems",
+    )
+    return crew
+
+
+@router.patch("/aircraft/{aircraft_id}")
+def update_aircraft_status(
+    aircraft_id: int,
+    payload: AircraftStatusUpdate,
+    request: Request,
+    db: Session = Depends(get_hems_db),
+    user: User = Depends(
+        require_roles(
+            UserRole.admin,
+            UserRole.hems_supervisor,
+            UserRole.aviation_qa,
+        )
+    ),
+):
+    aircraft = _fetch_aircraft(db, user, aircraft_id, request.state.training_mode)
+    before = model_snapshot(aircraft)
+    if payload.availability_status:
+        aircraft.availability_status = payload.availability_status
+    if payload.maintenance_status:
+        aircraft.maintenance_status = payload.maintenance_status
+    if payload.base:
+        aircraft.base = payload.base
+    db.commit()
+    db.refresh(aircraft)
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="update",
+        resource="hems_aircraft",
+        classification=aircraft.classification,
+        before_state=before,
+        after_state=model_snapshot(aircraft),
+        event_type="hems.aircraft.updated",
+        event_payload={"aircraft_id": aircraft.id},
+        schema_name="hems",
+    )
+    return aircraft
+
+
+@router.get("/weather")
+def hems_weather(lat: float, lng: float):
+    payload = {
+        "metar": f"METAR {lat:.2f}/{lng:.2f}",
+        "taf": "TAF placeholder",
+        "hazards": [],
+        "tfrs": [],
+        "generated_at": utc_now().isoformat(),
+    }
+    return payload
 
 
 @router.get("/dashboard")

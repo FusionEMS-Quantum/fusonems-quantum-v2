@@ -55,7 +55,7 @@ def _build_pkce() -> tuple[str, str]:
 
 
 def _frontend_redirect(path: str) -> str:
-    base = settings.ALLOWED_ORIGINS.split(",")[0].strip().rstrip("/")
+    base = settings.allowed_origins.split(",")[0].strip().rstrip("/")
     if not path.startswith("/"):
         path = f"/{path}"
     return f"{base}{path}"
