@@ -1,14 +1,15 @@
-// CAD (Interfacility) Detail View (read-only)
+"use client";
+
 import { useEffect, useState } from "react";
-import { useRouter } from "next/router";
-import { apiFetch } from "../../lib/api";
+import { useParams } from "next/navigation";
+import { apiFetch } from "@/lib/api";
 
 type CadCall = Record<string, any>;
 // Timeline endpoint for CAD is not clear; placeholder for future use
 
 export default function CADDetail() {
-  const router = useRouter();
-  const { id } = router.query;
+  const params = useParams();
+  const id = params?.id;
   const [call, setCall] = useState<CadCall | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -199,3 +199,19 @@ def require_on_shift(user: User = Depends(get_current_user), request: Request = 
     if request is not None and not getattr(request.state, "on_shift", True):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="OFF_SHIFT")
     return user
+
+
+async def get_current_user_ws(websocket, db: Session) -> Optional[User]:
+    token = websocket.query_params.get("token")
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
+        user_id = payload.get("sub")
+        if user_id is None:
+            return None
+        user_id = int(user_id)
+    except (JWTError, TypeError, ValueError):
+        return None
+    user = db.query(User).filter(User.id == user_id).first()
+    return user

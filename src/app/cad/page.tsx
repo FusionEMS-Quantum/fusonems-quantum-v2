@@ -1,6 +1,7 @@
-// CAD (Interfacility) Dashboard (read-only)
+"use client";
+
 import { useEffect, useState } from "react";
-import { apiFetch } from "../../lib/api";
+import { apiFetch } from "@/lib/api";
 
 type CadCall = Record<string, any>;
 
@@ -10,7 +11,7 @@ export default function CADDashboard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    apiFetch<CadCall[]>("/cad/calls")
+    apiFetch<CadCall[]>("/api/cad/calls")
       .then(setCalls)
       .catch(() => setError("Failed to load CAD calls."))
       .finally(() => setLoading(false));

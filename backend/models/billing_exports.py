@@ -68,8 +68,8 @@ class ClaimStatusInquiry(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
-class PatientStatement(Base):
-    __tablename__ = "patient_statements"
+class BillingPatientStatement(Base):
+    __tablename__ = "billing_patient_statements"
 
     id = Column(Integer, primary_key=True, index=True)
     org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)

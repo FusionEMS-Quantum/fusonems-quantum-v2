@@ -64,8 +64,8 @@ async def scan_device_screen(
         
         logger.info(f"User {current_user.id} scanning {device_type_enum} screen ({len(image_data)} bytes)")
         
-        # Run OCR
-        ocr_result = EquipmentScreenOCR.scan_device_screen(
+        # Run OCR with Ollama
+        ocr_result = await EquipmentScreenOCR.scan_device_screen(
             image_base64=image_base64,
             device_type=device_type_enum,
         )

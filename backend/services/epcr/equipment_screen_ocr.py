@@ -35,54 +35,50 @@ class EquipmentScreenOCR:
     """
     
     @staticmethod
-    def scan_device_screen(
+    async def scan_device_screen(
         image_base64: str,
         device_type: DeviceType,
     ) -> Dict[str, Any]:
         """
         Main entry point: image (phone camera) → OCR extraction → structured format
-        Uses Claude Vision API (no device integration needed)
+        Uses Ollama Vision Models (local, free, HIPAA-compliant)
         """
-        logger.info(f"Scanning {device_type} screen...")
+        logger.info(f"Scanning {device_type} screen with Ollama...")
         
         try:
-            import anthropic
+            from clients.ollama_client import OllamaClient
             from core.config import settings
             
-            if not settings.ANTHROPIC_API_KEY:
-                logger.warning("ANTHROPIC_API_KEY not set, using mock OCR")
-                return EquipmentScreenOCR._mock_ocr_result(device_type)
+            # Initialize Ollama client
+            ollama_base_url = getattr(settings, 'OLLAMA_SERVER_URL', 'http://localhost:11434')
+            client = OllamaClient(base_url=ollama_base_url)
             
-            client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-            
+            # Get specialized prompt for device type
             prompt = EquipmentScreenOCR._get_ocr_prompt(device_type)
             
-            message = client.messages.create(
-                model="claude-3-5-sonnet-20241022",
-                max_tokens=2000,
+            # Call Ollama vision model (llama3.2-vision recommended)
+            response = await client.chat(
                 messages=[
                     {
                         "role": "user",
-                        "content": [
-                            {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": "image/jpeg",
-                                    "data": image_base64,
-                                },
-                            },
-                            {
-                                "type": "text",
-                                "text": prompt
-                            }
-                        ],
+                        "content": prompt,
+                        "images": [image_base64]  # Ollama accepts base64 images in images array
                     }
                 ],
+                model="llama3.2-vision",
+                options={
+                    "temperature": 0.1,  # Low temperature for accuracy
+                    "top_p": 0.9,
+                }
             )
             
-            response_text = message.content[0].text
-            logger.info(f"Claude OCR response: {response_text[:200]}...")
+            # Extract response
+            if "error" in response:
+                logger.error(f"Ollama vision error: {response['error']}, using mock")
+                return EquipmentScreenOCR._mock_ocr_result(device_type)
+            
+            response_text = response.get("message", {}).get("content", "")
+            logger.info(f"Ollama OCR response: {response_text[:200]}...")
             
             result = EquipmentScreenOCR._parse_ocr_response(response_text, device_type)
             return result

@@ -1,6 +1,7 @@
-// ePCR Dashboard (read-only)
+"use client";
+
 import { useEffect, useState } from "react";
-import { apiFetch } from "../../lib/api";
+import { apiFetch } from "@/lib/api";
 
 type Patient = Record<string, any>;
 
@@ -10,7 +11,7 @@ export default function EPCRDashboard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    apiFetch<Patient[]>("/epcr/patients")
+    apiFetch<Patient[]>("/api/epcr/patients")
       .then(setPatients)
       .catch(() => setError("Failed to load ePCR patients."))
       .finally(() => setLoading(false));

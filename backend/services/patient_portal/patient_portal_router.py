@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.security import require_roles
-from models.patient_portal import PatientPortalAccount, PatientPortalMessage
+from models.patient_portal_extended import PatientPortalAccount, PatientPortalMessage
 from models.user import User, UserRole
 from utils.tenancy import scoped_query
 from utils.write_ops import apply_training_mode, audit_and_event, model_snapshot

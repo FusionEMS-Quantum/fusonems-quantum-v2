@@ -9,9 +9,22 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "FusionEMS Quantum • The Regulated EMS OS",
+  title: "FusionEMS Quantum | The Regulated EMS Operating System",
   description:
-    "FusionEMS Quantum is the cinematic portal for compliant EMS operations, telemetry, billing, and compliance.",
+    "Enterprise EMS operating system unifying CAD, ePCR, billing, compliance, and operational automation. NEMSIS-compliant, HIPAA-aligned, mission-critical support.",
+  keywords: "EMS software, CAD system, ePCR, NEMSIS, HIPAA, EMS billing, ambulance dispatch, emergency medical services",
+  openGraph: {
+    title: "FusionEMS Quantum | The Regulated EMS Operating System",
+    description: "Enterprise EMS platform for CAD, ePCR, billing, and compliance.",
+    images: ['/assets/logo-social.svg'],
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: "FusionEMS Quantum | Regulated EMS OS",
+    description: "Enterprise EMS operating system. NEMSIS-compliant. HIPAA-aligned.",
+    images: ['/assets/logo-social.svg'],
+  },
 };
 
 export default function RootLayout({

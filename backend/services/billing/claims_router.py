@@ -276,7 +276,6 @@ def ready_check(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.admin, UserRole.billing, UserRole.dispatcher)),
 ):
-    print("DEBUG ready_check entry")
     patient = _get_patient(request, db, user, epcr_patient_id)
     assist_result = _ensure_assist_result(db, request, user, patient)
     ready, reasons, fix_links, qa_score = _collect_ready_reasons(

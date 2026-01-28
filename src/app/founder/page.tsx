@@ -5,6 +5,23 @@ import { useEffect, useMemo, useState } from "react"
 
 import Sidebar from "@/components/layout/Sidebar"
 import Topbar from "@/components/layout/Topbar"
+import { 
+  SystemHealthWidget, 
+  StorageQuotaWidget, 
+  RecentActivityWidget,
+  BuilderSystemsWidget,
+  FailedOperationsWidget,
+  CommunicationDashboard,
+  AIBillingWidget,
+  EPCRImportWidget,
+  AccountingDashboardWidget,
+  ExpensesDashboardWidget,
+  MarketingAnalyticsWidget,
+  ReportingDashboardWidget,
+  ProtocolsDashboardWidget
+} from "@/components/founder"
+            {/* Protocols Management - Import, Review, Tag, Search */}
+            <ProtocolsDashboardWidget />
 import { apiFetch } from "@/lib/api"
 
 type ModuleHealth = {
@@ -56,12 +73,12 @@ export default function FounderPage() {
   }, [overview])
 
   return (
-    <div className="platform-shell">
+    <div className="min-h-screen bg-[#0a0a0a]">
       <Sidebar />
-      <main className="platform-main">
+      <main className="ml-64">
         <Topbar />
-        <div className="platform-content">
-          <section className="platform-page">
+        <div className="p-6">
+          <section className="space-y-6">
             <header>
               <p className="eyebrow">Founder Console</p>
               <h2>Command-grade overview</h2>
@@ -69,12 +86,38 @@ export default function FounderPage() {
                 <p className="muted-text">{error}</p>
               ) : (
                 <p className="muted-text">
-                  Insights into org health, queue depth, and recent critical audits.
+                  Real-time system health, storage, builders, and operational intelligence.
                 </p>
               )}
             </header>
 
+            {/* System Health - Top Priority */}
+            <SystemHealthWidget />
+
+            {/* Communication System - Unified communication platform */}
+            <CommunicationDashboard />
+
+            {/* AI Billing Assistant - For Single Biller Workflow */}
+            <AIBillingWidget />
+
+            {/* ePCR Import - ImageTrend/ZOLL Integration */}
+            <EPCRImportWidget />
+
+            {/* Accounting Dashboard - Cash/AR/P&L/Tax */}
+            <AccountingDashboardWidget />
+
+            {/* Receipts & Expenses - OCR & Approval Workflows */}
+            <ExpensesDashboardWidget />
+
+            {/* Marketing Analytics - Demo Requests & Lead Generation */}
+            <MarketingAnalyticsWidget />
+
+            {/* Reporting & Analytics - System-wide Reports & Compliance */}
+            <ReportingDashboardWidget />
+
+            {/* Critical Metrics Grid */}
             <div className="platform-card-grid">
+              <StorageQuotaWidget />
               {queueItems.map((item) => (
                 <article key={item.label} className="platform-card">
                   <p className="muted-text">{item.label}</p>
@@ -89,6 +132,16 @@ export default function FounderPage() {
               </article>
             </div>
 
+            {/* Builder Systems Health */}
+            <BuilderSystemsWidget />
+
+            {/* Failed Operations Alert */}
+            <FailedOperationsWidget />
+
+            {/* Recent Activity */}
+            <RecentActivityWidget />
+
+            {/* Organizations and Modules */}
             <div className="data-grid">
               <section className="panel">
                 <header>
@@ -135,6 +188,7 @@ export default function FounderPage() {
               </section>
             </div>
 
+            {/* Critical Audits */}
             <section className="panel">
               <header>
                 <h3>Critical audits</h3>

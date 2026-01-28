@@ -157,3 +157,35 @@ class NotificationService:
         db.refresh(pref)
         
         return pref
+
+
+async def send_notification(
+    db: Session,
+    user_id: int,
+    org_id: int,
+    notification_type: str,
+    title: str,
+    message: str,
+    severity: str = "info",
+    data: dict = None,
+) -> Optional[InAppNotification]:
+    """Send a notification to a user."""
+    try:
+        notification = InAppNotification(
+            user_id=user_id,
+            org_id=org_id,
+            notification_type=notification_type,
+            title=title,
+            message=message,
+            severity=severity,
+            data=data or {},
+            read=False,
+            created_at=datetime.utcnow(),
+        )
+        db.add(notification)
+        db.commit()
+        db.refresh(notification)
+        return notification
+    except Exception as e:
+        logger.error(f"Failed to send notification: {e}")
+        return None

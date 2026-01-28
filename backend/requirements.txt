@@ -18,3 +18,9 @@ lob
 lob
 pytest-asyncio>=0.23.0
 paramiko
+boto3
+python-socketio
+aiohttp
+reportlab
+geoalchemy2
+python-socketio

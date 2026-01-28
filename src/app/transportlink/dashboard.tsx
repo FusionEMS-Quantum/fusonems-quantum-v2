@@ -1,7 +1,7 @@
-// Facility overview dashboard
-// RBAC: Facility only
+"use client";
+
 import React, { useEffect, useState } from 'react';
-import ProtectedRoute from '../../components/ProtectedRoute.jsx';
+import ProtectedRoute from '@/components/ProtectedRoute.jsx';
 import { FACILITY_ROLES } from './facilityRoles';
 import { listTransports, createTransport } from './transportApi';
 // TODO: Import TransportCalendar, QuickBookButton

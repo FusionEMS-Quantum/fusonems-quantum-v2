@@ -1,7 +1,7 @@
-// Facesheet upload + scanning
-// RBAC: Facility only
+"use client";
+
 import React from 'react';
-import ProtectedRoute from '../../components/ProtectedRoute.jsx';
+import ProtectedRoute from '@/components/ProtectedRoute.jsx';
 import { FACILITY_ROLES } from './facilityRoles';
 // TODO: Import DocumentUploader, OCRPreview
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from models.epcr import Patient
 from models.telnyx import TelnyxCallSummary
 from models.user import User, UserRole
 from utils.time import utc_now
+from utils.tenancy import scoped_query
 
 
 router = APIRouter(
@@ -164,10 +165,13 @@ def console_denials(user: User = Depends(require_roles(UserRole.admin, UserRole.
 
 
 @router.get("/call-queue")
-def console_call_queue(user: User = Depends(require_roles(UserRole.admin, UserRole.billing)), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+def console_call_queue(
+    request: Request,
+    user: User = Depends(require_roles(UserRole.admin, UserRole.billing)),
+    db: Session = Depends(get_db),
+) -> list[dict[str, Any]]:
     rows = (
-        db.query(TelnyxCallSummary)
-        .filter(TelnyxCallSummary.org_id == user.org_id)
+        scoped_query(db, TelnyxCallSummary, user.org_id, request.state.training_mode)
         .order_by(TelnyxCallSummary.created_at.desc())
         .limit(20)
         .all()
@@ -175,8 +179,15 @@ def console_call_queue(user: User = Depends(require_roles(UserRole.admin, UserRo
     return [
         {
             "id": row.id,
+            "call_sid": row.call_sid,
+            "caller_number": row.caller_number,
             "intent": row.intent,
             "resolution": row.resolution,
+            "classification": row.classification,
+            "training_mode": row.training_mode,
+            "metadata": row.call_metadata,
+            "transcript": row.transcript,
+            "ai_response": row.ai_response,
             "created_at": row.created_at.isoformat() if row.created_at else None,
         }
         for row in rows

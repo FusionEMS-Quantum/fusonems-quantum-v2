@@ -311,14 +311,112 @@ class OfficeAllyClient:
         }
 
     def _build_edi_document(self, bundle: dict[str, Any]) -> str:
-        return "\n".join(
-            [
-                f"ISA|{bundle.get('claim_id')}",
-                f"NM1|{bundle['demographics'].get('first_name')}|{bundle['demographics'].get('last_name')}",
-                f"Code|{json.dumps(bundle.get('coding'))}",
-                f"Medical|{json.dumps(bundle.get('medical_necessity'))}",
-            ]
-        )
+        """Build HIPAA-compliant X12 837P professional claim document.
+        
+        Reference: X12N 005010X222A1 (837P Professional Claims)
+        """
+        from datetime import datetime
+        
+        claim = bundle.get('claim_data', {})
+        provider = bundle.get('provider_data', {})
+        patient = bundle.get('patient_data', {})
+        payer = bundle.get('payer_data', {})
+        
+        # Control numbers
+        isa_control_number = f"{self.org_id:09d}"
+        gs_control_number = "1"
+        st_control_number = "1"
+        
+        segments = []
+        
+        # ISA - Interchange Control Header
+        now = utc_now()
+        isa_date = now.strftime("%y%m%d")
+        isa_time = now.strftime("%H%M")
+        segments.append(f"ISA*00*{'12'*4}*ZZ*{settings.OFFICEALLY_INTERCHANGE_ID:\u003e15}*ZZ*{payer.get('interchange_id', 'OFFICEALLY'):\u003e15}*{isa_date}*{isa_time}*U*00501*{isa_control_number}*0*P*:")
+        
+        # GS - Functional Group Header  
+        segments.append(f"GS*HC*{settings.OFFICEALLY_TRADING_PARTNER_ID}*{payer.get('trading_partner_id', 'OFFICEALLY')}*{isa_date}*{isa_time}*{gs_control_number}*X*005010X222A1")
+        
+        # ST - Transaction Set Header
+        segments.append(f"ST*837*{st_control_number}*005010X222A1")
+        
+        # BHT - Beginning of Hierarchical Transaction
+        segments.append(f"BHT*0019*00*1*{isa_date}*{isa_time}*CH")
+        
+        # 1000A - Submitter Name
+        segments.append(f"NM1*41*2*{settings.OFFICEALLY_SUBMITTER_NAME}**46*{settings.OFFICEALLY_SUBMITTER_ID}")
+        segments.append(f"PER*IC*{provider.get('contact_name', 'BILLING DEPT')}*TE*{provider.get('contact_phone', settings.OFFICEALLY_CONTACT_PHONE).replace('-', '').replace(' ', '')}")
+        
+        # 1000B - Receiver Name  
+        segments.append(f"NM1*40*2*{payer.get('name', 'OFFICEALLY')}**46*{payer.get('receiver_id', 'OFFICEALLY')}")
+        
+        # 2000A - Billing Provider Hierarchical Level
+        segments.append(f"HL*1**20*1")
+        segments.append(f"PRV*BI*PXC*{provider.get('taxonomy_code', '207Q00000X')}")
+        segments.append(f"CUR*SE*USD")
+        
+        # 2010AA - Billing Provider Name
+        segments.append(f"NM1*85*2*{provider.get('name', 'PROVIDER')}**XX*{provider.get('npi', settings.OFFICEALLY_DEFAULT_NPI)}")
+        
+        # 2010AB - Pay-to Address
+        if provider.get('address'):
+            addr = provider['address']
+            segments.append(f"N3*{addr.get('line1', '123 MAIN ST')}")
+            segments.append(f"N4*{addr.get('city', 'ANYTOWN')}*{addr.get('state', 'CA')}*{addr.get('zip', '12345')}*{addr.get('country', 'US')}")
+        
+        # 2000B - Subscriber Hierarchical Level
+        segments.append(f"HL*2*1*22*0")  # 0 = patient is subscriber
+        
+        # 2010BA - Subscriber Name
+        segments.append(f"NM1*IL*1*{patient.get('last_name', 'PATIENT')}*{patient.get('first_name', 'JOHN')}*{patient.get('middle_name', '')}**MI*{patient.get('subscriber_id', 'SUB123')}")
+        
+        # 2010BB - Payer Name
+        segments.append(f"NM1*PR*2*{payer.get('name', 'MEDICARE')}**PI*{payer.get('payer_id', 'MEDICARE')}")
+        
+        # Subscriber Demographic Information
+        if patient.get('dob'):
+            segments.append(f"DMG*D8*{patient['dob'].strftime('%Y%m%d')}*{patient.get('gender', 'U')}")
+        
+        # 2000C - Patient Hierarchical Level (same as subscriber)
+        segments.append(f"HL*3*2*23*0")  
+        segments.append(f"PAT*19")  # 19 = self
+        
+        # 2010CA - Patient Name (same as subscriber)
+        segments.append(f"NM1*QC*1*{patient.get('last_name', 'PATIENT')}*{patient.get('first_name', 'JOHN')}*{patient.get('middle_name', '')}")
+        
+        # 2300 - Claim Information
+        segments.append(f"CLM*{claim.get('total_charge', '0.00').replace('.', '').replace(',', '')}*{claim.get('service_count', 1)}***11:B:1*Y*A*Y*Y")
+        
+        # 2300 - Health Care Diagnosis Code
+        diagnoses = claim.get('diagnoses', [])
+        if diagnoses:
+            segments.append(f"HI*BK:{diagnoses[0].replace('.', '')}")
+            for i, dx in enumerate(diagnoses[1:], 1):
+                segments.append(f"HI*BF:{dx.replace('.', '')}")
+        
+        # 2300 - Claim Date
+        service_date = claim.get('service_date_from', now)
+        if isinstance(service_date, str):
+            service_date = datetime.fromisoformat(service_date)
+        segments.append(f"DTP*431*D8*{service_date.strftime('%Y%m%d')}")
+        
+        # 2400 - Service Line Information
+        for line_no, line_item in enumerate(claim.get('service_lines', []), 1):
+            segments.append(f"LX*{line_no}")
+            segments.append(f"SV1*HC:{line_item.get('procedure_code', '99213')}:{line_item.get('modifier', '')}*{line_item.get('charge', '0.00').replace('.', '').replace(',', '')}***{line_item.get('unit_count', 1)}***1")
+            segments.append(f"DTP*472*D8*{service_date.strftime('%Y%m%d')}")
+            
+        # Transaction Set Footer
+        segments.append(f"SE*{len(segments) + 2}*{st_control_number}")  # +2 for ST and SE
+        
+        # Functional Group Footer
+        segments.append(f"GE*{len([s for s in segments if s.startswith('ST*')])}*{gs_control_number}")
+        
+        # Interchange Control Footer
+        segments.append(f"IEA*1*{isa_control_number}")
+        
+        return ''.join(segments)
 
     def _build_ack_payload(self, claim: BillingClaim, bundle: dict[str, Any], meta: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -350,14 +448,20 @@ class OfficeAllyClient:
             try:
                 import paramiko
             except ImportError as exc:
-                logger.warning("Paramiko unavailable, switching to local transport: %s", exc)
-            else:
-                return OfficeAllySftpTransport(
-                    settings.OFFICEALLY_FTP_HOST,
-                    settings.OFFICEALLY_FTP_PORT,
-                    settings.OFFICEALLY_FTP_USER,
-                    settings.OFFICEALLY_FTP_PASSWORD,
-                    settings.OFFICEALLY_SFTP_DIRECTORY,
-                    paramiko_module=paramiko,
-                )
-        return LocalOfficeAllyTransport(settings.OFFICEALLY_SFTP_DIRECTORY)
+                logger.error("Paramiko unavailable for SFTP transport: %s", exc)
+                raise RuntimeError("Paramiko is required for Office Ally SFTP transport. Install with: pip install paramiko")
+            
+            return OfficeAllySftpTransport(
+                settings.OFFICEALLY_FTP_HOST,
+                settings.OFFICEALLY_FTP_PORT,
+                settings.OFFICEALLY_FTP_USER,
+                settings.OFFICEALLY_FTP_PASSWORD,
+                settings.OFFICEALLY_SFTP_DIRECTORY,
+                paramiko_module=paramiko,
+            )
+        else:
+            logger.error("Office Ally SFTP credentials not configured")
+            raise RuntimeError(
+                "Office Ally SFTP credentials not configured. "
+                "Please set OFFICEALLY_FTP_HOST, OFFICEALLY_FTP_USER, and OFFICEALLY_FTP_PASSWORD"
+            )

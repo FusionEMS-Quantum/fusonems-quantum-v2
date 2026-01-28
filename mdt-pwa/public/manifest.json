@@ -1,0 +1,30 @@
+{
+  "name": "MDT - Mobile Data Terminal",
+  "short_name": "MDT",
+  "description": "Mobile Data Terminal with GPS-based automatic timestamping for ambulances and helicopters",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#1a1a1a",
+  "theme_color": "#1a1a1a",
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["medical", "utilities"],
+  "screenshots": [],
+  "scope": "/",
+  "permissions": [
+    "geolocation"
+  ]
+}

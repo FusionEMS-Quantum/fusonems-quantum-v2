@@ -14,7 +14,7 @@ from models.billing_exports import (
     ClaimSubmission,
     ClearinghouseAck,
     EligibilityCheck,
-    PatientStatement,
+    BillingPatientStatement,
     PaymentPosting,
     RemittanceAdvice,
 )
@@ -551,7 +551,7 @@ def create_statement(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher)),
 ):
-    record = PatientStatement(org_id=user.org_id, **payload.model_dump())
+    record = BillingPatientStatement(org_id=user.org_id, **payload.model_dump())
     apply_training_mode(record, request)
     db.add(record)
     db.commit()
@@ -576,8 +576,8 @@ def list_statements(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher)),
 ):
-    return scoped_query(db, PatientStatement, user.org_id, request.state.training_mode).order_by(
-        PatientStatement.created_at.desc()
+    return scoped_query(db, BillingPatientStatement, user.org_id, request.state.training_mode).order_by(
+        BillingPatientStatement.created_at.desc()
     )
 
 

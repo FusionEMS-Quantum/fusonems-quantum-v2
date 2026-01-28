@@ -1,258 +1,594 @@
-# FusionEMS Quantum - One-Command Deployment
+# FusionEMS Quantum Homepage - Deployment Guide
 
-## Your Droplet: 157.245.6.217
+## 🎯 Overview
 
-### Deploy Now (Single Command)
+This guide covers the complete deployment of the FusionEMS Quantum marketing homepage, including frontend (Next.js) and backend (FastAPI) integration.
+
+## 📋 Prerequisites
+
+### Frontend Requirements
+- Node.js 18+ and npm
+- Next.js 14+
+- Tailwind CSS configured
+
+### Backend Requirements
+- Python 3.11+
+- FastAPI
+- PostgreSQL (or SQLite for development)
+- Postmark account (for emails)
+
+## 🚀 Step-by-Step Deployment
+
+### 1. Frontend Setup
+
+#### Install Dependencies
 
 ```bash
-ssh root@157.245.6.217 "cd /root/fusonems-quantum-v2 && chmod +x deploy.sh && ./deploy.sh"
+cd /root/fusonems-quantum-v2
+npm install
 ```
 
-**What this does:**
-1. ✅ Syncs latest code
-2. ✅ Installs Ollama (self-hosted AI)
-3. ✅ Downloads AI models (20GB, ~15 min)
-4. ✅ Builds Docker images (backend + frontend)
-5. ✅ Starts all services
-6. ✅ Verifies everything is running
+#### Configure Environment Variables
 
-**Time:** ~20-30 minutes (mostly model downloads)
-
----
-
-## After Deployment
-
-### Access Your Platform
-
-- **Frontend:** http://157.245.6.217:3000
-- **Backend API:** http://157.245.6.217:8000
-- **API Docs:** http://157.245.6.217:8000/docs
-
-### First Steps
-
-1. **Register a new account**
-   - Go to http://157.245.6.217:3000/register
-   - Fill in email, password, full name, organization
-   - Submit
-
-2. **Login**
-   - Go to http://157.245.6.217:3000/login
-   - Use your credentials
-   - You're in the dashboard!
-
-3. **Test AI Features**
-   - Via API: `curl http://157.245.6.217:8000/docs`
-   - Scroll to `/api/ocr/scan_device` endpoint
-   - Test narrative generation, field suggestions, QA scoring
-
----
-
-## Monitoring
-
-### Check Service Status
+Create `.env.local`:
 
 ```bash
-# SSH into droplet
-ssh root@157.245.6.217
+# Copy example
+cp .env.example .env.local
 
-# View all containers
-docker ps
-
-# Check backend logs
-docker logs -f backend
-
-# Check Ollama AI status
-docker exec ollama ollama list
-
-# Check overall stats
-docker stats
+# Edit with your values
+nano .env.local
 ```
 
-### Common Commands
+Required variables:
+```env
+NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
+BACKEND_URL=http://localhost:8000
+POSTMARK_API_KEY=your_postmark_key
+POSTMARK_FROM_EMAIL=noreply@fusionems.com
+DEMO_NOTIFICATION_EMAIL=sales@fusionems.com
+```
+
+#### Build Frontend
 
 ```bash
-# Stop all services
-docker-compose down
+# Development
+npm run dev
 
-# Restart services
+# Production build
+npm run build
+npm start
+```
+
+### 2. Backend Setup
+
+#### Install Python Dependencies
+
+```bash
+cd /root/fusonems-quantum-v2/backend
+pip install fastapi pydantic sqlalchemy python-multipart
+```
+
+#### Verify Marketing Routes
+
+The marketing router has been added to `backend/main.py`:
+
+```python
+from services.marketing.routes import router as marketing_router
+app.include_router(marketing_router)
+```
+
+#### Run Backend
+
+```bash
+cd /root/fusonems-quantum-v2/backend
+uvicorn main:app --reload --port 8000
+```
+
+### 3. Verify Integration
+
+#### Test Demo Request Flow
+
+```bash
+# Test API endpoint
+curl -X POST http://localhost:8000/api/v1/demo-requests \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Test User",
+    "email": "test@example.com",
+    "organization": "Test EMS",
+    "phone": "555-1234",
+    "role": "ems-chief",
+    "timestamp": "2024-01-20T12:00:00Z",
+    "status": "pending",
+    "source": "website"
+  }'
+```
+
+Expected response:
+```json
+{
+  "success": true,
+  "message": "Demo request received",
+  "request_id": "DR-1234567890"
+}
+```
+
+#### Test Billing Lookup
+
+```bash
+curl -X POST http://localhost:8000/api/v1/billing/lookup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "account_number": "12345",
+    "zip_code": "12345"
+  }'
+```
+
+#### Test Frontend Pages
+
+Open browser and verify:
+
+1. **Homepage**: http://localhost:3000
+   - Hero section visible
+   - Professional logo displays
+   - Trust badges render
+   - CTAs functional
+
+2. **Portals Page**: http://localhost:3000/portals
+   - 13 portals display correctly
+   - Sections organized properly
+
+3. **Demo Page**: http://localhost:3000/demo
+   - Form renders
+   - Validation works
+   - Submit triggers API call
+
+4. **Billing Page**: http://localhost:3000/billing
+   - Account lookup form displays
+   - Security badges visible
+
+### 4. Email Configuration (Postmark)
+
+#### Setup Postmark
+
+1. Create account at https://postmarkapp.com
+2. Create server and get API key
+3. Verify sender domain
+
+#### Configure Email Templates
+
+In `/src/app/api/demo-request/route.ts`, emails are sent for:
+
+**To Sales Team:**
+- Subject: "New Demo Request: [Organization]"
+- Contains: Name, Email, Organization, Phone, Role, Challenges
+
+**To Requestor:**
+- Subject: "Your FusionEMS Quantum Demo Request"
+- Contains: Confirmation, next steps, contact info
+
+#### Test Email Delivery
+
+```bash
+# Set environment variable
+export POSTMARK_API_KEY=your_key_here
+
+# Submit demo request via frontend
+# Check Postmark dashboard for delivery
+```
+
+### 5. Production Deployment
+
+#### Frontend Deployment (Vercel/Netlify)
+
+**Vercel:**
+```bash
+# Install Vercel CLI
+npm i -g vercel
+
+# Deploy
+vercel
+
+# Set environment variables in Vercel dashboard
+# Deploy production
+vercel --prod
+```
+
+**Netlify:**
+```bash
+# Install Netlify CLI
+npm i -g netlify-cli
+
+# Deploy
+netlify deploy
+
+# Set environment variables in Netlify dashboard
+# Deploy production
+netlify deploy --prod
+```
+
+#### Backend Deployment (DigitalOcean/AWS/Heroku)
+
+**DigitalOcean App Platform:**
+
+1. Create `do-app.yaml`:
+```yaml
+name: fusionems-backend
+services:
+  - name: api
+    source_dir: /backend
+    run_command: uvicorn main:app --host 0.0.0.0 --port 8080
+    environment_slug: python
+    instance_size_slug: basic-xxs
+    envs:
+      - key: DATABASE_URL
+        value: ${db.DATABASE_URL}
+      - key: POSTMARK_API_KEY
+        value: ${POSTMARK_API_KEY}
+```
+
+2. Deploy:
+```bash
+doctl apps create --spec do-app.yaml
+```
+
+**Docker Deployment:**
+
+```bash
+# Build
+docker build -t fusionems-frontend .
+docker build -t fusionems-backend -f backend/Dockerfile backend/
+
+# Run
 docker-compose up -d
-
-# View database
-docker exec db psql -U user -d fusionems
-
-# Check API health
-curl http://157.245.6.217:8000/health
 ```
 
----
+### 6. DNS & SSL Configuration
 
-## Features Deployed
+#### Point Domain
 
-✅ **Authentication**
-- JWT login/register
-- Protected routes
-- Auth context available to all components
-
-✅ **Notifications**
-- In-app notifications
-- Email integration (Postmark)
-- SMS integration (Telnyx)
-- Event-driven architecture
-
-✅ **OCR System**
-- Equipment screen scanning (cardiac, vent, meds, blood)
-- NEMSIS field mapping
-- Confidence scoring
-- Auto-population
-
-✅ **ePCR Platform**
-- Patient models with state timeline
-- Narrative versioning
-- NEMSIS validation results
-
-✅ **Self-Hosted AI** (Zero Cost)
-- Mistral (narrative generation)
-- Neural-Chat (field suggestions)
-- Dolphin-Mixtral (complex reasoning)
-- No API costs, unlimited usage
-
----
-
-## Troubleshooting
-
-### If models are still downloading
-
-```bash
-# Check Ollama logs
-docker logs -f ollama
-
-# Download status
-docker exec ollama ollama list
-
-# Expected models: mistral, neural-chat, dolphin-mixtral
+Add DNS records:
+```
+A     @              -> Your server IP
+CNAME www            -> yourdomain.com
+A     api            -> Backend server IP
 ```
 
-### If backend can't connect to Ollama
+#### SSL Certificate
 
+**Frontend (Vercel/Netlify):**
+- Automatic SSL via platform
+
+**Backend (Let's Encrypt):**
 ```bash
-# Test from inside backend container
-docker exec backend curl http://ollama:11434/api/tags
+# Install certbot
+sudo apt install certbot python3-certbot-nginx
 
-# Should return JSON with models
+# Get certificate
+sudo certbot --nginx -d api.fusionems.com
 ```
 
-### If database isn't initialized
+### 7. Monitoring & Analytics
+
+#### Setup Application Monitoring
+
+**Sentry (Error Tracking):**
+```bash
+npm install @sentry/nextjs
+npx @sentry/wizard -i nextjs
+```
+
+**Google Analytics:**
+
+Add to `.env.local`:
+```env
+NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX
+```
+
+Create `src/lib/analytics.ts`:
+```tsx
+export const pageview = (url: string) => {
+  window.gtag('config', process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID!, {
+    page_path: url,
+  })
+}
+```
+
+#### Backend Monitoring
+
+**Health Check Endpoint:**
+```bash
+curl http://localhost:8000/api/v1/health/marketing
+```
+
+Expected:
+```json
+{
+  "status": "healthy",
+  "service": "marketing-api",
+  "timestamp": "2024-01-20T12:00:00Z"
+}
+```
+
+### 8. Performance Optimization
+
+#### Frontend
+
+**Image Optimization:**
+- SVG logos already optimized
+- Use Next.js `Image` component for PNGs
+
+**Code Splitting:**
+```tsx
+// Lazy load demo form
+const DemoForm = dynamic(() => import('@/components/DemoForm'), {
+  loading: () => <p>Loading...</p>
+})
+```
+
+**Static Generation:**
+```tsx
+// In page.tsx
+export const dynamic = 'force-static'
+```
+
+#### Backend
+
+**Database Connection Pooling:**
+```python
+# In core/database.py
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=10,
+    max_overflow=20,
+    pool_pre_ping=True
+)
+```
+
+**Caching:**
+```python
+from functools import lru_cache
+
+@lru_cache(maxsize=128)
+def get_organization_data(org_id: int):
+    # Cache organization lookups
+    pass
+```
+
+### 9. Security Hardening
+
+#### Frontend
+
+**Content Security Policy:**
+
+Add to `next.config.ts`:
+```ts
+const securityHeaders = [
+  {
+    key: 'Content-Security-Policy',
+    value: "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
+  }
+]
+```
+
+**Rate Limiting:**
+
+Install:
+```bash
+npm install express-rate-limit
+```
+
+#### Backend
+
+**CORS Configuration:**
+```python
+# In backend/main.py
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://fusionems.com"],
+    allow_credentials=True,
+    allow_methods=["POST", "GET"],
+    allow_headers=["*"],
+)
+```
+
+**Rate Limiting:**
+```bash
+pip install slowapi
+```
+
+```python
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+
+@router.post("/demo-requests")
+@limiter.limit("5/minute")
+async def create_demo_request(...):
+    ...
+```
+
+### 10. Testing Checklist
+
+#### Pre-Deployment Tests
+
+- [ ] All pages load without errors
+- [ ] Logo displays correctly on all pages
+- [ ] Demo form submits successfully
+- [ ] Email notifications sent
+- [ ] Billing lookup works
+- [ ] Mobile responsive design verified
+- [ ] Cross-browser testing passed
+- [ ] Accessibility (WCAG AA) validated
+- [ ] Lighthouse score >90
+- [ ] SSL certificate valid
+- [ ] API endpoints accessible
+- [ ] Error handling works
+- [ ] Loading states display
+
+#### Post-Deployment Verification
 
 ```bash
-# SSH in and run migrations
-docker exec backend python -m alembic upgrade head
+# Test production endpoints
+curl https://fusionems.com
+curl https://fusionems.com/portals
+curl https://fusionems.com/demo
+curl https://fusionems.com/billing
 
-# Or reset database
-docker-compose down -v
+# Test API
+curl https://api.fusionems.com/api/v1/health/marketing
+```
+
+### 11. Rollback Plan
+
+#### Frontend Rollback
+
+**Vercel:**
+```bash
+# List deployments
+vercel list
+
+# Rollback to previous
+vercel rollback [deployment-url]
+```
+
+**Netlify:**
+- Use Netlify dashboard to select previous deployment
+- Click "Publish deploy"
+
+#### Backend Rollback
+
+**Git Tag Previous Version:**
+```bash
+# Tag current stable version
+git tag -a v1.0-stable -m "Stable homepage release"
+git push origin v1.0-stable
+
+# Rollback if needed
+git checkout v1.0-stable
+docker build -t fusionems-backend:rollback .
 docker-compose up -d
 ```
 
-### If ports are already in use
+### 12. Post-Launch Monitoring
+
+#### Key Metrics to Track
+
+**First 24 Hours:**
+- Page load times
+- Error rates
+- Demo request submissions
+- Email delivery success rate
+- API response times
+
+**First Week:**
+- Conversion rate (visitors → demo requests)
+- Bounce rate
+- Average time on page
+- Mobile vs desktop traffic
+- Geographic distribution
+
+**Dashboard Setup:**
+
+Create monitoring dashboard with:
+- Google Analytics real-time view
+- Backend API logs
+- Error tracking (Sentry)
+- Uptime monitoring (UptimeRobot)
+
+### 13. Backup & Recovery
+
+#### Database Backups
 
 ```bash
-# Find what's using port 8000
-lsof -i :8000
-
-# Kill it if needed
-kill -9 <PID>
-
-# Or change ports in docker-compose.yml
+# Automated daily backups
+0 2 * * * pg_dump -U postgres fusionems_db > /backups/fusionems_$(date +\%Y\%m\%d).sql
 ```
 
----
+#### Code Repository
 
-## Cost Breakdown
-
-```
-Your current droplet:    $12/month
-Additional AI cost:      $0/month (runs on same droplet)
-────────────────────────────────
-Total:                   $12/month
-
-Unlimited usage:
-- Narrative generation:  $0 per chart
-- Field suggestions:     $0 per suggestion
-- QA scoring:            $0 per chart
-- OCR scanning:          $0 per scan
-
-vs Competitors:
-- ESO: $5/chart × 12,500/year = $62,500/year
-- ImageTrend: $3.50/chart × 12,500/year = $43,750/year
-- First Due: $18k-30k/year
-
-YOUR SAVINGS: $17k-62k/year
-```
-
----
-
-## What's Running
-
-```
-Container        Port     Purpose
-────────────────────────────────────────────────
-db              5432     PostgreSQL database
-backend         8000     FastAPI (auth, notifications, OCR, AI)
-frontend        3000     Next.js (login, register, dashboard)
-ollama          11434    Self-hosted AI models
-```
-
----
-
-## Docs
-
-- **Platform Overview:** `PLATFORM_SUMMARY.md`
-- **AI Setup:** `OLLAMA_QUICK_START.md`
-- **Self-Hosted AI:** `SELF_HOSTED_AI_SETUP.md`
-
----
-
-## Questions?
-
-### Check logs first
 ```bash
-docker logs backend
-docker logs ollama
-docker logs frontend
+# Ensure git remote is set
+git remote -v
+
+# Push all changes
+git push origin main
+
+# Tag release
+git tag -a v2.0-homepage -m "Marketing homepage launch"
+git push --tags
 ```
 
-### Common issues
+## 🔧 Troubleshooting
 
-**"Connection refused"**
-- Wait 30s for services to start
-- Check `docker ps` to see if all containers are running
+### Common Issues
 
-**"Out of memory"**
-- Ollama uses 6GB, backend uses ~1GB
-- You have 8GB total, should be fine
-- If issues, upgrade droplet to $24/month (16GB)
+**Issue: Demo form not submitting**
+- Check browser console for errors
+- Verify API endpoint URL in `.env.local`
+- Check CORS settings on backend
+- Verify network tab for failed requests
 
-**"Models not downloading"**
-- Check internet connection
-- Check disk space: `df -h`
-- Models are ~20GB total
-- Takes 10-20 minutes
+**Issue: Emails not sending**
+- Verify Postmark API key
+- Check sender domain verification
+- Review Postmark activity log
+- Test with curl command
+
+**Issue: Logo not displaying**
+- Verify SVG files exist in `/public/assets/`
+- Check browser network tab for 404s
+- Clear Next.js cache: `rm -rf .next`
+- Rebuild: `npm run build`
+
+**Issue: Backend API 500 errors**
+- Check backend logs: `docker logs [container-id]`
+- Verify database connection
+- Check environment variables
+- Review FastAPI error traceback
+
+## 📞 Support Contacts
+
+**Development Team:**
+- Frontend: frontend@fusionems.com
+- Backend: backend@fusionems.com
+- DevOps: devops@fusionems.com
+
+**Emergency Hotline:**
+- Phone: 1-800-555-0199
+- Slack: #fusionems-deploy
+
+## ✅ Deployment Completion Checklist
+
+- [ ] Frontend deployed and accessible
+- [ ] Backend API deployed and responsive
+- [ ] Database migrations applied
+- [ ] Environment variables configured
+- [ ] Email service (Postmark) configured
+- [ ] SSL certificates installed
+- [ ] DNS records updated
+- [ ] Monitoring dashboards active
+- [ ] Error tracking configured
+- [ ] Backup systems running
+- [ ] Team notified of deployment
+- [ ] Documentation updated
+- [ ] Rollback plan tested
+- [ ] Performance benchmarks met
+- [ ] Security scan passed
+
+## 🎉 Post-Deployment
+
+1. Announce launch to team
+2. Monitor for first 48 hours
+3. Schedule retrospective meeting
+4. Document lessons learned
+5. Plan future iterations
 
 ---
 
-## You're Live! 🚀
-
-FusionEMS Quantum is now running on your droplet.
-
-- Enterprise-grade EMS ePCR platform
-- All vendors' features combined
-- 99% cheaper than competitors
-- Self-hosted, full data control
-- Ready for production
-
-**Next steps:**
-1. Register account
-2. Explore dashboard
-3. Test OCR and AI features
-4. Invite team members
-
-Enjoy! 🎉
+**Deployment Date:** _____________  
+**Deployed By:** _____________  
+**Version:** v2.0-homepage  
+**Status:** ✅ Production Ready

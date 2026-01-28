@@ -1,1 +1,59 @@
-"use client"\n\nimport { useEffect, useState } from \"react\"\nimport ClaimCard from \"../../components/billing/ClaimCard\"\nimport DenialRiskBadge from \"../../components/billing/DenialRiskBadge\"\nimport { apiFetch } from \"../../lib/api\"\n\ntype ClaimReady = {\n  id: number\n  payer: string\n  status: string\n  denial_risks: string[]\n  created_at?: string\n  office_ally_batch_id?: string\n}\n\nexport default function ClaimsReadyPage() {\n  const [claims, setClaims] = useState<ClaimReady[]>([])\n  const [loading, setLoading] = useState(true)\n\n  useEffect(() => {\n    apiFetch<ClaimReady[]>(\"/billing/console/claims-ready\")\n      .then(setClaims)\n      .catch(console.error)\n      .finally(() => setLoading(false))\n  }, [])\n\n  return (\n    <main className=\"page-shell\">\n      <section className=\"glass-panel\" style={{ padding: \"2rem\" }}>\n        <header>\n          <p className=\"section-title\" style={{ margin: 0 }}>Claims Ready for Submission</p>\n          <p style={{ margin: 0, color: \"#bbb\" }}>Filter and submit with one click.</p>\n        </header>\n        {loading ? (\n          <p style={{ color: \"#bbb\", marginTop: \"1rem\" }}>Loading claims…</p>\n        ) : claims.length === 0 ? (\n          <p style={{ color: \"#bbb\", marginTop: \"1rem\" }}>No ready claims available.</p>\n        ) : (\n          <div style={{ marginTop: \"1.2rem\", display: \"grid\", gap: \"1rem\" }}>\n            {claims.map((claim) => (\n              <div key={claim.id}>\n                <ClaimCard\n                  id={claim.id}\n                  payer={claim.payer}\n                  status={claim.status}\n                  denialRisks={claim.denial_risks}\n                  createdAt={claim.created_at}\n                  officeAllyBatch={claim.office_ally_batch_id}\n                />\n                <DenialRiskBadge risks={claim.denial_risks} />\n              </div>\n            ))}\n          </div>\n        )}\n      </section>\n    </main>\n  )\n}\n*** End Patch*** 
+"use client"
+
+import { useEffect, useState } from "react"
+import ClaimCard from "@/components/billing/ClaimCard"
+import DenialRiskBadge from "@/components/billing/DenialRiskBadge"
+import { apiFetch } from "@/lib/api"
+
+type ClaimReady = {
+  id: number
+  payer: string
+  status: string
+  denial_risks: string[]
+  created_at?: string
+  office_ally_batch_id?: string
+}
+
+export default function ClaimsReadyPage() {
+  const [claims, setClaims] = useState<ClaimReady[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    apiFetch<ClaimReady[]>("/billing/console/claims-ready")
+      .then(setClaims)
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [])
+
+  return (
+    <main className="page-shell">
+      <section className="glass-panel" style={{ padding: "2rem" }}>
+        <header>
+          <p className="section-title" style={{ margin: 0 }}>Claims Ready for Submission</p>
+          <p style={{ margin: 0, color: "#bbb" }}>Filter and submit with one click.</p>
+        </header>
+        {loading ? (
+          <p style={{ color: "#bbb", marginTop: "1rem" }}>Loading claims…</p>
+        ) : claims.length === 0 ? (
+          <p style={{ color: "#bbb", marginTop: "1rem" }}>No ready claims available.</p>
+        ) : (
+          <div style={{ marginTop: "1.2rem", display: "grid", gap: "1rem" }}>
+            {claims.map((claim) => (
+              <div key={claim.id}>
+                <ClaimCard
+                  id={claim.id}
+                  payer={claim.payer}
+                  status={claim.status}
+                  denialRisks={claim.denial_risks}
+                  createdAt={claim.created_at}
+                  officeAllyBatch={claim.office_ally_batch_id}
+                />
+                <DenialRiskBadge risks={claim.denial_risks} />
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </main>
+  )
+}

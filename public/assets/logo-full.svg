@@ -1,33 +1,116 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="980" height="160" viewBox="0 0 980 160" role="img" aria-label="FusionEMS logo - dark header">
+<svg width="600" height="180" viewBox="0 0 600 180" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="g1" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0%" stop-color="#FF9B22"/>
-      <stop offset="85%" stop-color="#FF6A3A"/>
-      <stop offset="100%" stop-color="#FF3A2A"/>
+    <linearGradient id="qGradFull" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#C41E3A;stop-opacity:1" />
+      <stop offset="40%" style="stop-color:#D32F2F;stop-opacity:1" />
+      <stop offset="70%" style="stop-color:#FF6B35;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FFB300;stop-opacity:1" />
     </linearGradient>
-    <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
-      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000" flood-opacity="0.55"/>
+    
+    <linearGradient id="orbit1GradFull" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#1a1a1a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3a3a3a;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="orbit2GradFull" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF6B35;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#F7931E;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FFB300;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="ekgGradFull" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#FF6B35;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#D32F2F;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#C41E3A;stop-opacity:1" />
+    </linearGradient>
+    
+    <filter id="glowFull">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <filter id="shadowFull">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.2"/>
     </filter>
   </defs>
-
-  <!-- black background block to preview on dark header -->
-  <rect width="980" height="160" fill="#000000" rx="4"/>
-
-  <!-- emblem -->
-  <g transform="translate(28,28)" filter="url(#shadow)">
-    <rect x="0" y="0" width="104" height="104" rx="20" fill="#000000" stroke="#111" stroke-opacity="0.35"/>
-    <g transform="translate(52,52)">
-      <path d="M0,-34 C20,-34 38,-16 38,6 C38,34 20,54 0,54 C-14,54 -28,48 -36,36" fill="url(#g1)" transform="rotate(14) translate(-6,-6)"/>
-      <circle cx="-6" cy="-6" r="6" fill="#000000"/>
+  
+  <!-- Q Icon -->
+  <g transform="translate(90, 90)" filter="url(#shadowFull)">
+    <!-- Main Q -->
+    <circle cx="0" cy="0" r="50" stroke="url(#qGradFull)" stroke-width="11" fill="none"/>
+    <path d="M 28 28 L 42 45 Q 44 48 47 49" stroke="url(#qGradFull)" stroke-width="11" stroke-linecap="round"/>
+    
+    <!-- Black orbital swoosh -->
+    <path d="M -45 42 Q -15 28 15 10 Q 35 -5 52 -30" 
+          stroke="url(#orbit1GradFull)" 
+          stroke-width="6" 
+          fill="none" 
+          stroke-linecap="round"
+          opacity="0.9"/>
+    
+    <!-- Orange orbital swoosh -->
+    <ellipse cx="0" cy="0" rx="68" ry="55" 
+             stroke="url(#orbit2GradFull)" 
+             stroke-width="5" 
+             fill="none" 
+             opacity="0.85"
+             transform="rotate(-25)"
+             stroke-dasharray="140 35"/>
+    
+    <!-- Secondary orange accent -->
+    <path d="M -35 -25 Q -10 -8 15 5 Q 35 15 50 18" 
+          stroke="url(#orbit2GradFull)" 
+          stroke-width="3.5" 
+          fill="none" 
+          stroke-linecap="round"
+          opacity="0.6"/>
+    
+    <!-- EKG line -->
+    <path d="M -25 0 L -18 0 L -15 -9 L -12 14 L -9 -12 L -6 5 L -3 0 L 7 0 M 8 0 L 11 0 L 14 -8 L 17 13 L 20 -11 L 23 4 L 25 0" 
+          stroke="url(#ekgGradFull)" 
+          stroke-width="2.5" 
+          fill="none" 
+          stroke-linecap="round"
+          filter="url(#glowFull)"/>
+    
+    <!-- Particles -->
+    <circle cx="52" cy="-30" r="3" fill="#2a2a2a"/>
+    <circle cx="35" cy="-5" r="2.5" fill="#FF6B35"/>
+    <circle cx="15" cy="10" r="3" fill="#F7931E"/>
+    <circle cx="-35" cy="-25" r="2" fill="#FFB300" opacity="0.8"/>
+    <circle cx="50" cy="18" r="2.5" fill="#FFB300" opacity="0.7"/>
+    
+    <!-- Dot pattern -->
+    <g opacity="0.4">
+      <circle cx="-8" cy="-8" r="1.5" fill="#FFB300"/>
+      <circle cx="-4" cy="-10" r="1.5" fill="#FFB300"/>
+      <circle cx="0" cy="-11" r="1.5" fill="#FFB300"/>
+      <circle cx="4" cy="-10" r="1.5" fill="#FFB300"/>
+      <circle cx="8" cy="-8" r="1.5" fill="#FFB300"/>
     </g>
   </g>
-
-  <!-- horizontal wordmark (heavier) -->
-  <g transform="translate(160,88)">
-    <text x="0" y="6" font-family="Inter, Roboto, Arial, sans-serif" font-weight="800" font-size="54" fill="#FFFFFF">Fusion</text>
-    <text x="190" y="6" font-family="Inter, Roboto, Arial, sans-serif" font-weight="900" font-size="54" fill="url(#g1)">EMS</text>
-    <text x="0" y="36" font-family="Inter, Roboto, Arial, sans-serif" font-weight="600" font-size="12" fill="#9AA0A6">Unified EMS operating system</text>
+  
+  <!-- Text -->
+  <g transform="translate(200, 0)">
+    <!-- Main title -->
+    <text x="0" y="80" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="900" fill="#1a1a1a" letter-spacing="1">
+      FusionEMS
+    </text>
+    <text x="265" y="80" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="900" fill="#D32F2F" letter-spacing="1">
+      Quantum
+    </text>
+    
+    <!-- Trademark -->
+    <text x="390" y="65" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" fill="#666666">
+      ™
+    </text>
+    
+    <!-- Subtitle -->
+    <text x="2" y="115" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="600" fill="#4a4a4a" letter-spacing="2">
+      Built on Quantum Engine Technology
+    </text>
   </g>
-
 </svg>

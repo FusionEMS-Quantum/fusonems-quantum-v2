@@ -1,0 +1,313 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { apiFetch } from "@/lib/api"
+
+interface PhoneSystemStats {
+  active_calls: number
+  calls_today: number
+  missed_calls: number
+  voicemail_count: number
+  ava_ai_responses_today: number
+  hours_saved_today: number
+  customer_satisfaction_score: number
+  issue_resolution_rate: number
+}
+
+interface RecentCall {
+  id: string
+  caller_number: string
+  direction: "inbound" | "outbound"
+  started_at: string
+  duration_seconds: number
+  status: string
+  ai_handled: boolean
+  ivr_route: string
+  transcription_status: string
+}
+
+interface AIInsight {
+  type: "missed_opportunity" | "customer_issue" | "optimization"
+  title: string
+  description: string
+  impact: "high" | "medium" | "low"
+  recommended_action: string
+  auto_routed: boolean
+}
+
+export default function PhoneDashboardWidget() {
+  const [stats, setStats] = useState<PhoneSystemStats | null>(null)
+  const [recentCalls, setRecentCalls] = useState<RecentCall[]>([])
+  const [aiInsights, setAiInsights] = useState<AIInsight[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string>("")
+  const [showDialer, setShowDialer] = useState(false)
+  const [dialNumber, setDialNumber] = useState("")
+  const [callStatus, setCallStatus] = useState<string>("")
+
+  useEffect(() => {
+    let mounted = true
+    
+    const fetchPhoneData = async () => {
+      try {
+        const [statsData, callsData, insightsData] = await Promise.all([
+          apiFetch<PhoneSystemStats>("/api/founder/phone/stats"),
+          apiFetch<RecentCall[]>("/api/founder/phone/recent-calls"),
+          apiFetch<AIInsight[]>("/api/founder/phone/ai-insights")
+        ])
+        
+        if (mounted) {
+          setStats(statsData)
+          setRecentCalls(callsData)
+          setAiInsights(insightsData)
+          setLoading(false)
+        }
+      } catch (err) {
+        if (mounted) {
+          setError("Failed to load phone data")
+          setLoading(false)
+        }
+      }
+    }
+
+    fetchPhoneData()
+    
+    // Auto-refresh every 30 seconds for active calls
+    const interval = setInterval(fetchPhoneData, 30000)
+    
+    return () => {
+      mounted = false
+      clearInterval(interval)
+    }
+  }, [])
+
+  const handleMakeCall = async () => {
+    if (!dialNumber.trim()) return
+    
+    setCallStatus("Initiating call...")
+    try {
+      const response = await apiFetch<{ call_id: string; status: string }>("/api/founder/phone/make-call", {
+        method: "POST",
+        body: JSON.stringify({ 
+          to_number: dialNumber,
+          from_number: "+1" // Requires Telnyx configuration
+        })
+      })
+      
+      setCallStatus(`Call ${response.status}`)
+      setTimeout(() => setCallStatus(""), 5000)
+      
+    } catch (err) {
+      setCallStatus("Call failed - check configuration")
+      setTimeout(() => setCallStatus(""), 5000)
+    }
+  }
+
+  const formatDuration = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = seconds % 60
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
+  }
+
+  const formatPhone = (number: string) => {
+    const cleaned = number.replace(/\D/g, '')
+    if (cleaned.length === 11) {
+      return `+${cleaned.slice(0,1)} ${cleaned.slice(1,4)}-${cleaned.slice(4,7)}-${cleaned.slice(7)}`
+    } else if (cleaned.length === 10) {
+      return `${cleaned.slice(0,3)}-${cleaned.slice(3,6)}-${cleaned.slice(6)}`
+    }
+    return number
+  }
+
+  if (loading) {
+    return (
+      <section className="panel">
+        <header>
+          <h3>Phone System</h3>
+        </header>
+        <div className="data-grid">
+          <p className="muted-text">Loading phone data...</p>
+        </div>
+      </section>
+    )
+  }
+
+  if (error) {
+    return (
+      <section className="panel">
+        <header>
+          <h3>Phone System</h3>
+        </header>
+        <div className="data-grid">
+          <p className="warning-text">{error}</p>
+        </div>
+      </section>
+    )
+  }
+
+  return (
+    <div className="panel-stack">
+      {/* Main Stats */}
+      <section className="panel">
+        <header>
+          <h3>Phone System</h3>
+          <span className="status-pill status-healthy">AVA AI Active</span>
+        </header>
+        <div className="data-grid">
+          <article className={`panel-card ${stats?.active_calls > 0 ? "success" : ""}`}>
+            <p className="muted-text">Active Calls</p>
+            <strong>{stats?.active_calls || 0}</strong>
+          </article>
+          
+          <article className="panel-card">
+            <p className="muted-text">Today</p>
+            <strong>{stats?.calls_today || 0} calls</strong>
+          </article>
+          
+          <article className={`panel-card ${stats?.missed_calls > 0 ? "warning" : ""}`}>
+            <p className="muted-text">Missed</p>
+            <strong>{stats?.missed_calls || 0}</strong>
+          </article>
+          
+          <article className="panel-card">
+            <p className="muted-text">Voicemail</p>
+            <strong>{stats?.voicemail_count || 0}</strong>
+          </article>
+          
+          <article className="panel-card">
+            <p className="muted-text">AI Responses</p>
+            <strong>{stats?.ava_ai_responses_today || 0}</strong>
+          </article>
+          
+          <article className="panel-card">
+            <p className="muted-text">Hours Saved</p>
+            <strong>{stats?.hours_saved_today?.toFixed(1) || 0}</strong>
+          </article>
+        </div>
+        
+        <div className="panel-stack" style={{ marginTop: "1rem" }}
+          <button
+            className="cta-button cta-primary"
+            onClick={() => setShowDialer(!showDialer)}
+          >
+            {showDialer ? "Hide Dialer" : "Make Call"}
+          </button>
+          <button
+            className="cta-button cta-secondary"
+            onClick={() => window.open('/founder/phone/dashboard', '_blank')}
+          >
+            Phone Dashboard
+          </button>
+        </div>
+            onClick={() => window.open('/founder/phone/dashboard', '_blank')}
+          >
+            Phone Dashboard
+          </button>
+        </div>
+      </section>
+
+      {/* Dialer Panel */}
+      {showDialer && (
+        <section className="panel">
+          <header>
+            <h3>Make a Call</h3>
+          </header>
+          <div className="dialer-container" style={{ marginBottom: "1rem" }}>
+            <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+              <input
+                type="tel"
+                className="dial-input"
+                placeholder="Enter phone number (e.g., +15551234567)"
+                value={dialNumber}
+                onChange={(e) => setDialNumber(e.target.value)}
+                style={{ flex: 1, padding: "0.5rem" }}
+              />
+            </div>
+            <button 
+              className="cta-button cta-primary"
+              onClick={handleMakeCall}
+              disabled={!dialNumber.trim()}
+            >
+              Make Call
+            </button>
+            
+            {callStatus && (
+              <p style={{ marginTop: "0.5rem", color: callStatus.includes('failed') ? 'var(--warning)' : 'var(--success)' }}>
+                {callStatus}
+              </p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* AI Insights */}
+      {aiInsights.length > 0 && (
+        <section className="panel">
+          <header>
+            <h3>AI Phone Insights</h3>
+          </header>
+          <div className="data-grid">
+            {aiInsights.map((insight, index) => (
+              <article 
+                key={index} 
+                className={`panel-card ${insight.type === "customer_issue" ? "warning" : insight.type === "missed_opportunity" ? "error" : ""}`}
+              >
+                <div>
+                  <strong>{insight.title}</strong>
+                  <p className="muted-text">{insight.description}</p>
+                  <p className="muted-text">
+                    Impact: <strong className={insight.impact === "high" ? "warning-text" : ""}>
+                      {insight.impact}
+                    </strong>
+                  </p>
+                  {insight.auto_routed && (
+                    <span className="status-pill status-healthy">Auto-Routed</span>
+                  )}
+                </div>
+                {insight.recommended_action && (
+                  <button className="cta-button cta-secondary cta-sm">
+                    {insight.recommended_action}
+                  </button>
+                )}
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Recent Calls */}
+      <section className="panel">
+        <header>
+          <h3>Recent Calls</h3>
+        </header>
+        <div className="data-grid">
+          {recentCalls.slice(0, 5).map((call) => (
+            <article key={call.id} className={`panel-card ${call.ai_handled ? "success" : ""}`}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <span className={call.direction === "inbound" ? "icon-inbound" : "icon-outbound"}>
+                    {call.direction === "inbound" ? "↓" : "↑"}
+                  </span>
+                  <strong>{formatPhone(call.caller_number)}</strong>
+                </div>
+                <p className="muted-text">{call.started_at}</p>
+                <p className="muted-text">{call.ivr_route}</p>
+                {call.ai_handled && (
+                  <span className="status-pill status-healthy">AI Handled</span>
+                )}
+              </div>
+              <div>
+                <strong>{formatDuration(call.duration_seconds)}</strong>
+                <p className="muted-text">{call.status}</p>
+                <p className="muted-text">{call.transcription_status}</p>
+              </div>
+            </article>
+          ))}
+          {recentCalls.length === 0 && (
+            <p className="muted-text">No recent calls</p>
+          )}
+        </div>
+      </section>
+    </div>
+  )
+}

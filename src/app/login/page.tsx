@@ -3,8 +3,8 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { apiFetch } from "../../lib/api"
-import { useAuth } from "../../lib/auth-context"
+import { apiFetch } from "@/lib/api"
+import { useAuth } from "@/lib/auth-context"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -29,7 +29,7 @@ export default function LoginPage() {
         "/auth/login",
         {
           method: "POST",
-          data: { email, password },
+          body: JSON.stringify({ email, password }),
         }
       )
       localStorage.setItem("token", response.access_token)

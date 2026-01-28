@@ -205,3 +205,64 @@ class FireInventoryHook(FireBase):
     reported_by = Column(String, default="")
     payload = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Fire911Transport(FireBase):
+    __tablename__ = "fire_911_transports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, nullable=False, index=True)
+    classification = Column(String, default="PHI")
+    training_mode = Column(Boolean, default=False)
+    
+    incident_id = Column(String, nullable=False, index=True)
+    transport_id = Column(String, unique=True, nullable=False, index=True)
+    
+    first_name = Column(String, nullable=False)
+    last_name = Column(String, nullable=False)
+    date_of_birth = Column(String, nullable=False)
+    phone = Column(String, default="")
+    address = Column(String, default="")
+    
+    chief_complaint = Column(String, nullable=False)
+    chief_complaint_icd10 = Column(String, default="")
+    
+    vitals = Column(JSON, nullable=False, default=dict)
+    assessment = Column(Text, default="")
+    
+    interventions = Column(JSON, nullable=False, default=list)
+    medications = Column(JSON, nullable=False, default=list)
+    procedures = Column(JSON, nullable=False, default=list)
+    
+    transport_decision = Column(String, default="Transport")
+    transport_destination = Column(String, default="")
+    transport_mode = Column(String, default="Ground")
+    
+    responding_unit = Column(String, default="")
+    responding_personnel = Column(JSON, nullable=False, default=list)
+    
+    narrative = Column(Text, default="")
+    status = Column(String, default="Draft")
+    
+    scene_time = Column(DateTime(timezone=True), nullable=True)
+    transport_initiated_time = Column(DateTime(timezone=True), nullable=True)
+    arrival_at_hospital_time = Column(DateTime(timezone=True), nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class Fire911TransportTimeline(FireBase):
+    __tablename__ = "fire_911_transport_timeline"
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, nullable=False, index=True)
+    classification = Column(String, default="OPS")
+    training_mode = Column(Boolean, default=False)
+    
+    transport_id = Column(Integer, ForeignKey("fire_911_transports.id"), nullable=False)
+    transport_identifier = Column(String, nullable=False)
+    event_type = Column(String, nullable=False)
+    notes = Column(Text, default="")
+    event_data = Column(JSON, nullable=False, default=dict)
+    recorded_at = Column(DateTime(timezone=True), server_default=func.now())

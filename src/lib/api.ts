@@ -5,7 +5,7 @@ import axios, {
 } from "axios"
 import { pushError } from "./errorBus"
 
-const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
+const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? ""
 
 export const apiClient = axios.create({
   baseURL: baseUrl,

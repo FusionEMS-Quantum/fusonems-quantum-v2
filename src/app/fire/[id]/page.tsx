@@ -1,15 +1,16 @@
-// Fire Detail View (read-only)
+"use client";
+
 import { useEffect, useState } from "react";
-import { useRouter } from "next/router";
-import { apiFetch } from "../../lib/api";
+import { useParams } from "next/navigation";
+import { apiFetch } from "@/lib/api";
 
 type Incident = Record<string, any>;
 type TimelineEntry = Record<string, any>;
 type Assignment = Record<string, any>;
 
 export default function FireDetail() {
-  const router = useRouter();
-  const { id } = router.query;
+  const params = useParams();
+  const id = params?.id;
   const [incident, setIncident] = useState<Incident | null>(null);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);

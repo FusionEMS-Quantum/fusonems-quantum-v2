@@ -18,6 +18,8 @@ const NAV_ITEMS = [
   { to: "/fleet", label: "Fleet", moduleKey: "FLEET" },
   { to: "/fire", label: "Fire", moduleKey: "FIRE" },
   { to: "/hems", label: "HEMS", moduleKey: "HEMS" },
+  { to: "/hr", label: "HR & Personnel", moduleKey: "HR" },
+  { to: "/training", label: "Training Center", moduleKey: "TRAINING" },
   { to: "/documents", label: "Documents", moduleKey: "DOCUMENT_STUDIO" },
   { to: "/ai-console", label: "AI Console", moduleKey: "AI_CONSOLE" },
   { to: "/founder", label: "Founder", moduleKey: "FOUNDER" },

@@ -64,6 +64,12 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     signature = request.headers.get("stripe-signature", "")
     signature_valid = False
 
+    if settings.stripe_webhook_secret and not signature:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Stripe signature header",
+        )
+
     if settings.stripe_webhook_secret:
         try:
             event = stripe.Webhook.construct_event(
@@ -105,6 +111,11 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         org_id = int(metadata.get("org_id"))
         receipt.org_id = org_id
         db.commit()
+
+    if not signature_valid:
+        receipt.processing_status = "unverified"
+        db.commit()
+        return {"status": receipt.processing_status}
 
     result = handle_stripe_event(db, event, org_id, signature_valid)
     receipt.processing_status = result.get("status", "processed")

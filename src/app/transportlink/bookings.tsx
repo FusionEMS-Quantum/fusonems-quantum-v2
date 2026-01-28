@@ -1,12 +1,12 @@
-// Manage active bookings
-// RBAC: Facility only
+"use client";
+
 import React, { useEffect, useState } from 'react';
-import ProtectedRoute from '../../components/ProtectedRoute.jsx';
+import ProtectedRoute from '@/components/ProtectedRoute.jsx';
 import { FACILITY_ROLES } from './facilityRoles';
 import { listTransports, getTransport } from './transportApi';
 // TODO: Import BookingList, BulkActions
 
-import DocumentWorkflowModal from '../../components/transportlink/DocumentWorkflowModal';
+import DocumentWorkflowModal from '@/components/transportlink/DocumentWorkflowModal';
 import { useState as useToastState } from 'react';
 
 const STATUS_OPTIONS = [

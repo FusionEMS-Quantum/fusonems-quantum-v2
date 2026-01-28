@@ -1,0 +1,138 @@
+Fire MDT PWA - Complete Structure
+==================================
+
+fire-mdt-pwa/
+├── package.json                        # Dependencies and scripts
+├── vite.config.ts                      # Vite + PWA plugin configuration
+├── tsconfig.json                       # TypeScript configuration
+├── tsconfig.node.json                  # TypeScript config for Vite
+├── .eslintrc.cjs                       # ESLint configuration
+├── .gitignore                          # Git ignore rules
+├── .env.example                        # Environment variables template
+├── index.html                          # HTML entry point
+├── README.md                           # Complete documentation
+│
+├── public/
+│   ├── manifest.json                   # PWA manifest
+│   └── icons/                          # PWA icons (8 sizes)
+│       ├── icon-72x72.png
+│       ├── icon-96x96.png
+│       ├── icon-128x128.png
+│       ├── icon-144x144.png
+│       ├── icon-152x152.png
+│       ├── icon-192x192.png
+│       ├── icon-384x384.png
+│       └── icon-512x512.png
+│
+└── src/
+    ├── main.tsx                        # React entry point
+    ├── App.tsx                         # Main app with routing & GPS
+    ├── index.css                       # Global styles
+    │
+    ├── types/
+    │   └── index.ts                    # TypeScript interfaces
+    │
+    ├── lib/
+    │   ├── auth.ts                     # Keycloak integration
+    │   ├── api.ts                      # API client with offline queue
+    │   ├── offline-queue.ts            # IndexedDB offline queue
+    │   ├── state-machine.ts            # Fire MDT state logic
+    │   ├── geofence.ts                 # Geofence calculations
+    │   ├── obd.ts                      # OBD-II integration
+    │   └── store.ts                    # Zustand global state
+    │
+    ├── components/
+    │   ├── TimelineView.tsx            # Event timeline
+    │   ├── MapView.tsx                 # Leaflet map
+    │   ├── StateIndicator.tsx          # State display
+    │   └── OfflineIndicator.tsx        # Offline banner
+    │
+    └── pages/
+        ├── Login.tsx                   # Keycloak login
+        ├── Dashboard.tsx               # Main dashboard
+        ├── GenerateIncident.tsx        # Manual incident creation
+        ├── ActiveIncident.tsx          # Live incident tracking
+        ├── History.tsx                 # Incident history
+        └── Settings.tsx                # Device configuration
+
+Key Features Implemented:
+=========================
+
+1. GENERATE INCIDENT BUTTON
+   - Prominent button on dashboard
+   - Full incident creation form
+   - Location entry with lat/lng
+   - Optional transport destination
+   - Creates geofences automatically
+
+2. OFFLINE-FIRST ARCHITECTURE
+   - IndexedDB-based queue
+   - All events queued locally
+   - Automatic sync when online
+   - Retry logic (5 attempts)
+   - Queue size display
+
+3. STATE MACHINE DISPLAY
+   - Visual color-coded indicator
+   - 8 states supported
+   - Manual state transitions
+   - Auto-transitions on geofence
+   - Auto-transitions on OBD
+
+4. GPS TRACKING
+   - HTML5 Geolocation API
+   - High accuracy mode
+   - Automatic breadcrumb logging
+   - Speed and heading capture
+   - Map trail visualization
+
+5. OBD INTEGRATION
+   - Ignition status
+   - Gear position (P/R/N/D/L)
+   - Vehicle speed
+   - RPM display
+   - Mock adapter (ready for real integration)
+
+6. TIMELINE VIEW
+   - All events with timestamps
+   - Source indicators (manual/GPS/geofence/OBD/CAD)
+   - Location display
+   - Sync status
+   - Reverse chronological order
+
+7. GEOFENCE VISUALIZATION
+   - Scene circle (red)
+   - Destination circle (blue)
+   - Station circle (green)
+   - Configurable radius
+   - Auto-trigger state changes
+
+8. OFFLINE BANNER
+   - Fixed position at top
+   - Red when offline
+   - Yellow when syncing
+   - Shows queue count
+   - Auto-hides when online
+
+Technologies:
+=============
+- React 18
+- TypeScript
+- Vite + PWA plugin
+- Zustand (state management)
+- React Router (navigation)
+- Leaflet (maps)
+- date-fns (date handling)
+- IndexedDB/idb (offline storage)
+- Keycloak (authentication)
+- Workbox (service worker)
+
+Next Steps:
+===========
+1. Replace icon placeholders with actual Fire MDT icons
+2. Implement real OBD-II adapter integration (ELM327/OBDLink)
+3. Add CAD push notification handlers
+4. Configure backend API endpoints
+5. Set up Keycloak client
+6. Test offline functionality
+7. Deploy as PWA to device

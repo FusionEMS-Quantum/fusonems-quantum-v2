@@ -22,7 +22,7 @@ from models.billing_exports import (
     ClaimSubmission,
     ClearinghouseAck,
     EligibilityCheck,
-    PatientStatement,
+    BillingPatientStatement,
     PaymentPosting,
     RemittanceAdvice,
 )
@@ -39,6 +39,71 @@ from models.cad import (
 )
 from models.mdt import MdtCadSyncEvent, MdtEvent, MdtObdIngest
 from models.compliance import AccessAudit, ComplianceAlert
+# New HR/Personnel Models
+from models.hr_personnel import (
+    Personnel,
+    Certification,
+    EmployeeDocument,
+    PerformanceReview,
+    DisciplinaryAction,
+    TimeEntry,
+    PayrollPeriod,
+    Paycheck,
+    LeaveRequest,
+    LeaveBalance,
+    ShiftDifferential,
+)
+# New Training Models
+from models.training_management import (
+    TrainingCourse,
+    CredentialRecord,
+    SkillCheckoff,
+    CERecord,
+)
+# New Fire RMS Models
+from models.fire_rms import (
+    FirePersonnel,
+    Hydrant,
+    HydrantInspection,
+    FireInspection,
+    PreFirePlan,
+    CommunityRiskReduction,
+    ApparatusMaintenanceRecord,
+    FireIncidentSupplement,
+)
+# New Patient Portal Models
+from models.patient_portal_extended import (
+    PatientPortalAccount,
+    PatientPortalMessage,
+    MedicalRecordRequest,
+    PatientBillPayment,
+    AppointmentRequest,
+    PatientPortalAccessLog,
+    PatientDocumentShare,
+    PatientPreference,
+    PatientSurveyResponse,
+)
+# New AI Intelligence Models
+from models.ai_intelligence import (
+    CallVolumePrediction,
+    CrewFatigueAnalysis,
+    OptimalUnitPlacement,
+    AIDocumentationAssistant,
+    PredictiveMaintenanceAlert,
+    LiveEpcrCollaboration,
+    TeamChatMessage,
+    VideoConferenceSession,
+    PerformanceBadge,
+    PersonnelBadgeAward,
+    Leaderboard,
+    PerformancePoints,
+    PointsTransaction,
+    VoiceCommand,
+    VoiceToTextVitals,
+    AIProtocolRecommendation,
+    DrugInteractionCheck,
+    DifferentialDiagnosisAssistant,
+)
 from models.communications import (
     CommsBroadcast,
     CommsCallLog,
@@ -55,6 +120,7 @@ from models.communications import (
 )
 from models.documents import DocumentTemplate, DocumentRecord
 from models.email import EmailAttachmentLink, EmailLabel, EmailMessage, EmailMessageLabel, EmailThread
+from models.fax import FaxRecord, FaxAttachment
 from models.quantum_documents import (
     DiscoveryExport,
     DocumentFile,
@@ -88,6 +154,18 @@ from models.hems import (
     HemsQualityReview,
     HemsRiskAssessment,
 )
+from models.hems_aviation import (
+    HemsFlightLog,
+    HemsAircraftMaintenance,
+    HemsAirworthinessDirective,
+    HemsWeatherMinimums,
+    HemsWeatherDecisionLog,
+    HemsPilotCurrency,
+    HemsFlightDutyRecord,
+    HemsChecklist,
+    HemsChecklistCompletion,
+    HemsFRATAssessment,
+)
 from models.narcotics import NarcoticCustodyEvent, NarcoticDiscrepancy, NarcoticItem
 from models.medication import MedicationAdministration, MedicationFormularyVersion, MedicationMaster
 from models.inventory import InventoryItem, InventoryMovement, InventoryRigCheck
@@ -95,6 +173,27 @@ from models.fleet import FleetInspection, FleetMaintenance, FleetTelemetry, Flee
 from models.founder_ops import DataGovernanceRule, IncidentCommand, PricingPlan, PwaDistribution
 from models.exports import CarefusionExportSnapshot, DataExportManifest, OrphanRepairAction
 from models.epcr import Patient, MasterPatient, MasterPatientLink, MasterPatientMerge, NEMSISValidationResult, PatientStateTimeline, NarrativeVersion
+from models.epcr_core import (
+    EpcrAssessment,
+    EpcrIntervention,
+    EpcrMedication,
+    EpcrNarrative,
+    EpcrOcrSnapshot,
+    EpcrRecord,
+    EpcrTimeline,
+    EpcrVitals,
+    OfflineSyncQueue,
+    PreArrivalNotification,
+    ProtocolPathway,
+    ProviderCertification,
+    CertificationType,
+    EpcrValidationRule,
+    EpcrVisibilityRule,
+    EpcrSchematronRule,
+)
+from models.epcr_ems import EpcrEmsRecord
+from models.epcr_fire import EpcrFireRecord
+from models.epcr_hems import EpcrHemsRecord
 from models.fire import (
     FireApparatus,
     FireApparatusInventory,
@@ -110,7 +209,6 @@ from models.fire import (
     FireInventoryHook,
 )
 from models.legal_portal import LegalCase, LegalEvidence
-from models.patient_portal import PatientPortalAccount, PatientPortalMessage
 from models.founder import FounderMetric
 from models.investor_demo import InvestorMetric
 from models.analytics import AnalyticsMetric, UsageEvent
@@ -118,13 +216,6 @@ from models.workflow import WorkflowState
 from models.mail import Message
 from models.scheduling import Shift
 from models.search import SearchIndexEntry, SavedSearch
-from models.training_center import (
-    CERecord,
-    CredentialRecord,
-    SkillCheckoff,
-    TrainingCourse,
-    TrainingEnrollment,
-)
 from models.telehealth import TelehealthMessage, TelehealthParticipant, TelehealthSession
 from models.user import User, UserRole
 from models.validation import DataValidationIssue, ValidationRule
@@ -132,6 +223,128 @@ from models.compliance import ForensicAuditLog
 from models.support import SupportInteraction, SupportMirrorEvent, SupportSession
 from models.notifications import InAppNotification, NotificationPreference
 from models.telnyx import TelnyxCallSummary, TelnyxFaxRecord
+from models.expenses import Expense, ExpenseReceipt, ExpenseApprovalWorkflow
+from models.metriport import (
+    PatientInsurance,
+    MetriportPatientMapping,
+    MetriportWebhookEvent,
+    MetriportDocumentSync,
+    InsuranceVerificationLog,
+)
+from models.routing import (
+    TrafficEvent,
+    RouteCalculation,
+    TrafficFeedSource,
+    RoutingConfig,
+    TrafficEventType,
+    TrafficSeverity,
+    RoutingEngine
+)
+
+from models.intelligence import (
+    CallVolumeForecast,
+    CoverageRiskSnapshot,
+    UnitTurnaroundPrediction,
+    CrewFatigueScore,
+    IntelligentAlert,
+    DocumentationRiskAssessment,
+    NEMSISValidationPrediction,
+    AIRecommendationOutcome,
+    UserAIFeedback,
+    AIAuditLog,
+    ForecastHorizon,
+    CallVolumeType,
+    ConfidenceLevel,
+    CoverageRiskLevel,
+    AlertSeverity,
+    AlertType,
+    AlertAudience,
+    FeedbackType
+)
+
+from models.guided_automation import (
+    RecommendedAction,
+    GuidedWorkflow,
+    AssistedDocumentation,
+    IntelligentScheduleSuggestion,
+    SupplyReplenishmentPrompt,
+    ActionType,
+    ActionStatus,
+    WorkflowStage
+)
+
+from models.autonomous_ops import (
+    NotificationRoutingRule,
+    BackgroundOptimization,
+    SystemInitiatedSuggestion,
+    SelfHealingAction,
+    AutomatedReporting,
+    LearnedPattern,
+    AutonomousActionLog,
+    AutomationTrigger,
+    AutomationStatus
+)
+
+from models.ecosystem_intelligence import (
+    CrossAgencyLoadBalance,
+    RegionalCoverageOptimization,
+    HospitalDemandAwareness,
+    SystemWideSurgeCoordination,
+    AgencyPartnership,
+    NetworkOptimizationResult,
+    RegionalCoordinationType,
+    AgencyRelationshipType
+)
+
+from models.strategic_intelligence import (
+    StrategicTrendAnalysis,
+    LongTermForecast,
+    PolicyImpactSimulation,
+    BudgetStrategyModel,
+    StaffingStrategyRecommendation,
+    OutcomeOptimizationInsight,
+    RegulatoryReadinessScore,
+    ExecutiveDashboardMetric,
+    TrendDirection,
+    PolicyImpactConfidence
+)
+
+from models.founder_billing import (
+    PatientStatement as FounderPatientStatement,
+    StatementDelivery,
+    BillingAuditLog,
+    StatementEscalation,
+    LobMailJob,
+    SoleBillerConfig,
+    AIBillingDecision,
+    StatementLifecycleState,
+    DeliveryChannel,
+    AIActionType
+)
+
+from models.wisconsin_billing import (
+    PatientStatementTemplate,
+    WisconsinBillingConfig,
+    BillingHealthSnapshot,
+    StatementDeliveryLog,
+    TaxExemptionRecord,
+    CollectionsEscalationRecord,
+    AIBillingActionLog,
+    TemplateType,
+    BillingHealthStatus
+)
+
+from models.collections_governance import (
+    CollectionsGovernancePolicy,
+    CollectionsAccount,
+    CollectionsActionLog,
+    CollectionsDecisionRequest,
+    WriteOffRecord,
+    CollectionsProhibitedAction,
+    CollectionsPhase,
+    CollectionsAction,
+    WriteOffReason
+)
 
 __all__ = [
     "AiInsight",
@@ -151,7 +364,7 @@ __all__ = [
     "ClearinghouseAck",
     "EligibilityCheck",
     "ClaimStatusInquiry",
-    "PatientStatement",
+    "BillingPatientStatement",
     "PaymentPosting",
     "AppealPacket",
     "BillingClaim",
@@ -191,6 +404,8 @@ __all__ = [
     "EmailLabel",
     "EmailMessageLabel",
     "EmailAttachmentLink",
+    "FaxRecord",
+    "FaxAttachment",
     "DocumentTemplate",
     "DocumentRecord",
     "DocumentFolder",
@@ -252,6 +467,25 @@ __all__ = [
     "MasterPatient",
     "MasterPatientLink",
     "MasterPatientMerge",
+    "EpcrAssessment",
+    "EpcrIntervention",
+    "EpcrMedication",
+    "EpcrNarrative",
+    "EpcrOcrSnapshot",
+    "EpcrRecord",
+    "EpcrTimeline",
+    "EpcrVitals",
+    "OfflineSyncQueue",
+    "PreArrivalNotification",
+    "ProtocolPathway",
+    "ProviderCertification",
+    "CertificationType",
+    "EpcrSchematronRule",
+    "EpcrVisibilityRule",
+    "EpcrValidationRule",
+    "EpcrEmsRecord",
+    "EpcrFireRecord",
+    "EpcrHemsRecord",
     "FounderMetric",
     "InvestorMetric",
     "AnalyticsMetric",
@@ -262,7 +496,6 @@ __all__ = [
     "SearchIndexEntry",
     "SavedSearch",
     "TrainingCourse",
-    "TrainingEnrollment",
     "CredentialRecord",
     "SkillCheckoff",
     "CERecord",
@@ -273,7 +506,6 @@ __all__ = [
     "UserRole",
     "Organization",
     "DataValidationIssue",
-    "ValidationRule",
     "FireIncident",
     "FireApparatus",
     "FireApparatusInventory",
@@ -297,4 +529,12 @@ __all__ = [
     "NotificationPreference",
     "TelnyxCallSummary",
     "TelnyxFaxRecord",
+    "Expense",
+    "ExpenseReceipt",
+    "ExpenseApprovalWorkflow",
+    "PatientInsurance",
+    "MetriportPatientMapping",
+    "MetriportWebhookEvent",
+    "MetriportDocumentSync",
+    "InsuranceVerificationLog",
 ]

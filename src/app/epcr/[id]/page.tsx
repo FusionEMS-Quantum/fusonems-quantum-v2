@@ -1,14 +1,15 @@
-// ePCR Detail View (read-only)
+"use client";
+
 import { useEffect, useState } from "react";
-import { useRouter } from "next/router";
-import { apiFetch } from "../../lib/api";
+import { useParams } from "next/navigation";
+import { apiFetch } from "@/lib/api";
 
 type Patient = Record<string, any>;
 type Validation = Record<string, any>;
 
 export default function EPCRDetail() {
-  const router = useRouter();
-  const { id } = router.query;
+  const params = useParams();
+  const id = params?.id;
   const [patient, setPatient] = useState<Patient | null>(null);
   const [validation, setValidation] = useState<Validation | null>(null);
   const [loading, setLoading] = useState(true);

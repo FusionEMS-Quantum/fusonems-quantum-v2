@@ -1,1 +1,83 @@
-"use client"\n\nimport { useEffect, useState } from \"react\"\nimport { apiFetch } from \"../../lib/api\"\nimport RCMChart from \"../../components/billing/RCMChart\"\n\ntype AnalyticsPayload = {\n  denial_rate: number\n  aging: Record<string, number>\n  payer_mix: { payer: string; count: number }[]\n  days_to_pay: number\n  paid_month_to_date: number\n}\n\nexport default function BillingAnalyticsPage() {\n  const [analytics, setAnalytics] = useState<AnalyticsPayload | null>(null)\n\n  useEffect(() => {\n    apiFetch<AnalyticsPayload>(\"/billing/console/analytics\")\n      .then(setAnalytics)\n      .catch(console.error)\n  }, [])\n\n  if (!analytics) {\n    return <p className=\"page-shell\">Loading analytics…</p>\n  }\n\n  return (\n    <main className=\"page-shell\">\n      <section className=\"glass-panel\" style={{ padding: \"2rem\" }}>\n        <header>\n          <p className=\"section-title\" style={{ margin: 0 }}>Analytics & RCM</p>\n          <p style={{ margin: 0, color: \"#bbb\" }}>Denial rates, aging, payer mix, and cash velocity.</p>\n        </header>\n        <div style={{ marginTop: \"1.5rem\", display: \"grid\", gap: \"1rem\" }}>\n          <div\n            style={{\n              background: \"rgba(12,12,12,0.8)\",\n              borderRadius: 12,\n              border: \"1px solid rgba(255,255,255,0.08)\",\n              padding: \"1rem\",\n            }}\n          >\n            <p style={{ margin: 0, color: \"#bbb\" }}>Denial Rate</p>\n            <strong style={{ fontSize: \"2rem\", color: \"#ff7c29\" }}>{(analytics.denial_rate * 100).toFixed(1)}%</strong>\n          </div>\n          <div\n            style={{\n              background: \"rgba(12,12,12,0.8)\",\n              borderRadius: 12,\n              border: \"1px solid rgba(255,255,255,0.08)\",\n              padding: \"1rem\",\n            }}\n          >\n            <p style={{ margin: 0, color: \"#bbb\" }}>Days to Pay (avg)</p>\n            <strong style={{ fontSize: \"2rem\", color: \"#ff7c29\" }}>{analytics.days_to_pay.toFixed(1)}</strong>\n          </div>\n          <div\n            style={{\n              background: \"rgba(12,12,12,0.8)\",\n              borderRadius: 12,\n              border: \"1px solid rgba(255,255,255,0.08)\",\n              padding: \"1rem\",\n            }}\n          >\n            <p style={{ margin: 0, color: \"#bbb\" }}>Paid (MTD)</p>\n            <strong style={{ fontSize: \"2rem\", color: \"#ff7c29\" }}>{analytics.paid_month_to_date}</strong>\n          </div>\n        </div>\n        <div style={{ marginTop: \"1.5rem\", display: \"grid\", gap: \"1.2rem\" }}>\n          <RCMChart\n            title=\"Aging (days)\"\n            data={Object.entries(analytics.aging).map(([bucket, value]) => ({ label: `${bucket}+`, value }))}\n          />\n          <RCMChart\n            title=\"Top Payers\"\n            data={analytics.payer_mix.map((entry) => ({ label: entry.payer, value: entry.count }))}\n          />\n        </div>\n      </section>\n    </main>\n  )\n}\n*** End Patch*** 
+"use client"
+
+import { useEffect, useState } from "react"
+import { apiFetch } from "@/lib/api"
+import RCMChart from "@/components/billing/RCMChart"
+
+type AnalyticsPayload = {
+  denial_rate: number
+  aging: Record<string, number>
+  payer_mix: { payer: string; count: number }[]
+  days_to_pay: number
+  paid_month_to_date: number
+}
+
+export default function BillingAnalyticsPage() {
+  const [analytics, setAnalytics] = useState<AnalyticsPayload | null>(null)
+
+  useEffect(() => {
+    apiFetch<AnalyticsPayload>("/billing/console/analytics")
+      .then(setAnalytics)
+      .catch(console.error)
+  }, [])
+
+  if (!analytics) {
+    return <p className="page-shell">Loading analytics…</p>
+  }
+
+  return (
+    <main className="page-shell">
+      <section className="glass-panel" style={{ padding: "2rem" }}>
+        <header>
+          <p className="section-title" style={{ margin: 0 }}>Analytics & RCM</p>
+          <p style={{ margin: 0, color: "#bbb" }}>Denial rates, aging, payer mix, and cash velocity.</p>
+        </header>
+        <div style={{ marginTop: "1.5rem", display: "grid", gap: "1rem" }}>
+          <div
+            style={{
+              background: "rgba(12,12,12,0.8)",
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.08)",
+              padding: "1rem",
+            }}
+          >
+            <p style={{ margin: 0, color: "#bbb" }}>Denial Rate</p>
+            <strong style={{ fontSize: "2rem", color: "#ff7c29" }}>{(analytics.denial_rate * 100).toFixed(1)}%</strong>
+          </div>
+          <div
+            style={{
+              background: "rgba(12,12,12,0.8)",
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.08)",
+              padding: "1rem",
+            }}
+          >
+            <p style={{ margin: 0, color: "#bbb" }}>Days to Pay (avg)</p>
+            <strong style={{ fontSize: "2rem", color: "#ff7c29" }}>{analytics.days_to_pay.toFixed(1)}</strong>
+          </div>
+          <div
+            style={{
+              background: "rgba(12,12,12,0.8)",
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.08)",
+              padding: "1rem",
+            }}
+          >
+            <p style={{ margin: 0, color: "#bbb" }}>Paid (MTD)</p>
+            <strong style={{ fontSize: "2rem", color: "#ff7c29" }}>{analytics.paid_month_to_date}</strong>
+          </div>
+        </div>
+        <div style={{ marginTop: "1.5rem", display: "grid", gap: "1.2rem" }}>
+          <RCMChart
+            title="Aging (days)"
+            data={Object.entries(analytics.aging).map(([bucket, value]) => ({ label: `${bucket}+`, value }))}
+          />
+          <RCMChart
+            title="Top Payers"
+            data={analytics.payer_mix.map((entry) => ({ label: entry.payer, value: entry.count }))}
+          />
+        </div>
+      </section>
+    </main>
+  )
+}

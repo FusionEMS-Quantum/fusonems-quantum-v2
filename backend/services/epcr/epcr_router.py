@@ -1,38 +1,38 @@
 from datetime import datetime, timezone
-from difflib import SequenceMatcher
-import json
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from core.database import get_db
-from core.config import settings
 from core.guards import require_module
-from core.security import require_roles, require_on_shift, require_trusted_device
-from models.epcr import Patient, MasterPatient, MasterPatientLink
+from core.security import require_on_shift, require_roles, require_trusted_device
+from models.epcr import Patient
+from models.epcr_core import (
+    EpcrAssessment,
+    EpcrIntervention,
+    EpcrMedication,
+    EpcrNarrative,
+    EpcrRecord,
+    EpcrRecordStatus,
+    EpcrTimeline,
+    EpcrVitals,
+    NEMSISValidationResult,
+    NEMSISValidationStatus,
+)
 from models.user import User, UserRole
-from utils.legal import enforce_legal_hold
-from utils.decision import DecisionBuilder, finalize_decision_packet, hash_payload
-from utils.events import event_bus
-from utils.write_ops import apply_training_mode, audit_and_event, model_snapshot
-from utils.tenancy import get_scoped_record, scoped_query
+from utils.tenancy import scoped_query
 
-OCR_DEVICE_TYPES = {
-    "monitor": ["heart_rate", "pulse_rate", "spo2", "bp_systolic", "bp_diastolic", "etco2", "temperature"],
-    "ventilator": ["vent_mode", "fio2", "peep", "tidal_volume", "resp_rate", "pressure_support"],
-    "pump": ["medication_name", "dose_rate", "dose_units", "volume_remaining", "concentration"],
-}
-OCR_MIN_CONFIDENCE = 0.85
-NEMSIS_RULES = {
-    "WI": {
-        "required": ["first_name", "last_name", "date_of_birth", "incident_number"],
-        "vitals": ["hr", "bp_systolic", "bp_diastolic", "spo2"],
-        "ventilator_fields": ["vent_mode", "fio2", "peep"],
-    }
-}
+from .ai_suggestions import AISuggestions
+from .billing_sync import BillingSyncService
+from .cad_sync import CADSyncService
+from .hospital_notifications import HospitalNotificationService
+from .nemsis_export import NEMSISExporter
+from .offline_sync import OfflineSyncManager
+from .ocr_service import OCRService
+from .rule_engine import RuleEngine
+from .voice_service import VoiceService
 
 router = APIRouter(
     prefix="/api/epcr",
@@ -41,775 +41,413 @@ router = APIRouter(
 )
 
 
-class PatientCreate(BaseModel):
-    first_name: str
-    last_name: str
-    date_of_birth: str
-    phone: str = ""
-    address: str = ""
+class RecordCreate(BaseModel):
+    patient_id: int
     incident_number: str
-    vitals: dict = {}
-    interventions: list = []
-    medications: list = []
-    procedures: list = []
-    labs: list = []
-    cct_interventions: list = []
-    ocr_snapshots: list = []
-    narrative: str = ""
-    nemsis_version: str = "3.5.1"
+    record_number: Optional[str] = None
+    chief_complaint: Optional[str] = ""
+    dispatch_datetime: Optional[datetime] = None
+    scene_arrival_datetime: Optional[datetime] = None
+    hospital_arrival_datetime: Optional[datetime] = None
+    patient_destination: Optional[str] = ""
+    custom_fields: Dict[str, Any] = Field(default_factory=dict)
     nemsis_state: str = "WI"
+    training_mode: bool = False
 
 
-class PatientResponse(PatientCreate):
+class RecordUpdate(BaseModel):
+    chief_complaint: Optional[str] = None
+    patient_destination: Optional[str] = None
+    scene_departure_datetime: Optional[datetime] = None
+    hospital_arrival_datetime: Optional[datetime] = None
+    custom_fields: Dict[str, Any] = Field(default_factory=dict)
+    status: Optional[EpcrRecordStatus] = None
+
+
+class RecordResponse(BaseModel):
     id: int
+    patient_id: int
+    incident_number: str
+    record_number: str
+    status: EpcrRecordStatus
+    chief_complaint: str
+    created_at: datetime
+    updated_at: datetime
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
-@router.post("/patients", response_model=PatientResponse, status_code=status.HTTP_201_CREATED)
-def create_patient(
-    payload: PatientCreate,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
-    _: User = Depends(require_on_shift),
-    __: User = Depends(require_trusted_device),
-):
-    enforce_legal_hold(db, user.org_id, "epcr_patient", payload.incident_number, "create")
-    patient = Patient(**payload.model_dump(), org_id=user.org_id)
-    apply_training_mode(patient, request)
-    db.add(patient)
-    db.commit()
-    db.refresh(patient)
-    audit_and_event(
-        db=db,
-        request=request,
-        user=user,
-        action="create",
-        resource="epcr_patient",
-        classification=patient.classification,
-        after_state=model_snapshot(patient),
-        event_type="epcr.patient.created",
-        event_payload={"patient_id": patient.id, "incident_number": patient.incident_number},
-    )
-    return patient
+class VitalEntry(BaseModel):
+    values: Dict[str, Any]
+    recorded_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+    source: str = "manual"
+    notes: str = ""
+    provider_id: Optional[int] = None
 
 
-class OCRField(BaseModel):
-    field: str
-    value: str | float | int | None = None
-    confidence: float = 0.0
-    bbox: dict | None = None
-    page: int | None = None
-    source: str | None = None
+class AssessmentEntry(BaseModel):
+    assessment_summary: str
+    clinical_impression: Optional[str] = ""
+    plan: Optional[str] = ""
+    chief_complaint: Optional[str] = ""
 
 
-class OCRIngest(BaseModel):
+class InterventionEntry(BaseModel):
+    procedure_name: str
+    description: Optional[str] = ""
+    performed_at: Optional[datetime] = None
+    location: Optional[str] = "scene"
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class MedicationEntry(BaseModel):
+    medication_name: str
+    ndc: Optional[str] = ""
+    dose: Optional[str] = ""
+    units: Optional[str] = ""
+    route: Optional[str] = ""
+    administration_time: Optional[datetime] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class NarrativeEntry(BaseModel):
+    narrative_text: Optional[str] = ""
+    structured_data: Dict[str, Any] = Field(default_factory=dict)
+    voice_transcription: Optional[str] = None
+    origin: str = "manual"
+
+
+class OCRSnapshotEntry(BaseModel):
     device_type: str
     device_name: str = ""
-    fields: list[OCRField] | dict = {}
+    fields: Dict[str, Any] = Field(default_factory=dict)
     confidence: float = 0.0
-    captured_at: str = ""
+    captured_at: Optional[datetime] = None
     raw_text: str = ""
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
-class NarrativeUpdate(BaseModel):
-    narrative: str
+class TimelineEvent(BaseModel):
+    event_type: str
+    description: str
+    timestamp: datetime
+    metadata: Dict[str, Any]
 
 
-class LabEntry(BaseModel):
-    lab_type: str
-    values: dict
-    collected_at: str = ""
+class ValidationStatusResponse(BaseModel):
+    status: str
+    validator_version: str
+    errors: List[Dict[str, Any]]
+    missing_fields: List[str]
+    validation_timestamp: datetime
+
+    class Config:
+        orm_mode = True
 
 
-class CCTIntervention(BaseModel):
-    intervention: str
-    details: dict = {}
-    performed_at: str = ""
+def _get_record(db: Session, user: User, record_id: int) -> EpcrRecord:
+    record = scoped_query(db, EpcrRecord, user.org_id).filter(EpcrRecord.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ePCR record not found")
+    return record
 
 
-class MasterPatientLinkCreate(BaseModel):
-    master_patient_id: int
-    provenance: str = ""
-
-class RepeatCandidate(BaseModel):
-    master_patient_id: int
-    score: float
-    reasons: list[str]
-
-
-def _normalize(value: str) -> str:
-    return "".join(char for char in value.lower().strip() if char.isalnum() or char.isspace()).strip()
-
-
-def _normalize_digits(value: str) -> str:
-    return "".join(char for char in value if char.isdigit())
+def _append_timeline(db: Session, record: EpcrRecord, event_type: str, description: str, metadata: Dict[str, Any] | None = None):
+    entry = EpcrTimeline(
+        org_id=record.org_id,
+        record_id=record.id,
+        event_type=event_type,
+        description=description,
+        timestamp=datetime.now(timezone.utc),
+        metadata=metadata or {},
+    )
+    db.add(entry)
+    db.commit()
 
 
-def _similarity(left: str, right: str) -> float:
-    if not left or not right:
-        return 0.0
-    if left == right:
-        return 1.0
-    return SequenceMatcher(None, left, right).ratio()
+@router.post("/records", response_model=RecordResponse, status_code=status.HTTP_201_CREATED)
+def create_record(
+    payload: RecordCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
+    _: User = Depends(require_on_shift),
+    __: User = Depends(require_trusted_device),
+):
+    patient = scoped_query(db, Patient, user.org_id).filter(Patient.id == payload.patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+
+    record = EpcrRecord(
+        org_id=user.org_id,
+        patient_id=payload.patient_id,
+        record_number=payload.record_number or f"REC-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+        incident_number=payload.incident_number,
+        chief_complaint=payload.chief_complaint,
+        dispatch_datetime=payload.dispatch_datetime,
+        scene_arrival_datetime=payload.scene_arrival_datetime,
+        hospital_arrival_datetime=payload.hospital_arrival_datetime,
+        patient_destination=payload.patient_destination,
+        custom_fields=payload.custom_fields,
+        nemsis_state=payload.nemsis_state,
+        training_mode=payload.training_mode,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    _append_timeline(db, record, "record.created", "Record created", {"created_by": user.id, "incident_number": record.incident_number})
+    return record
 
 
-def _load_mpi_weights() -> dict:
-    default_weights = {
-        "first_name": 0.3,
-        "last_name": 0.3,
-        "date_of_birth": 0.25,
-        "phone": 0.15,
-    }
-    raw_weights = getattr(settings, "MPI_MATCH_WEIGHTS", None)
-    if raw_weights:
-        try:
-            weights = json.loads(raw_weights)
-            if isinstance(weights, dict):
-                filtered = {key: float(val) for key, val in weights.items() if key in default_weights}
-                total = sum(filtered.values())
-                if total > 0:
-                    return {key: val / total for key, val in filtered.items()}
-        except (json.JSONDecodeError, TypeError, ValueError):
-            pass
-    return default_weights
+@router.get("/records", response_model=List[RecordResponse])
+def list_records(
+    status_filter: Optional[EpcrRecordStatus] = None,
+    patient_id: Optional[int] = None,
+    limit: int = 25,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
+):
+    query = scoped_query(db, EpcrRecord, user.org_id)
+    if status_filter:
+        query = query.filter(EpcrRecord.status == status_filter)
+    if patient_id:
+        query = query.filter(EpcrRecord.patient_id == patient_id)
+    records = query.order_by(EpcrRecord.created_at.desc()).offset(offset).limit(limit).all()
+    return records
 
 
-def _load_mpi_threshold() -> float:
-    raw_threshold = getattr(settings, "MPI_MATCH_THRESHOLD", 0.8)
+@router.get("/records/{record_id}", response_model=RecordResponse)
+def get_record(
+    record_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
+):
+    record = _get_record(db, user, record_id)
+    return record
+
+
+@router.patch("/records/{record_id}", response_model=RecordResponse)
+def update_record(
+    record_id: int,
+    payload: RecordUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
+):
+    record = _get_record(db, user, record_id)
+    updates = payload.dict(exclude_unset=True)
+    for attr, value in updates.items():
+        if hasattr(record, attr):
+            setattr(record, attr, value)
+    db.commit()
+    db.refresh(record)
+    _append_timeline(db, record, "record.updated", "Record updated", {"updates": updates, "updated_by": user.id})
+    return record
+
+
+@router.post("/records/{record_id}/vitals", status_code=status.HTTP_201_CREATED)
+def add_vitals(
+    record_id: int,
+    payload: VitalEntry,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
+):
+    record = _get_record(db, user, record_id)
+    vitals = EpcrVitals(
+        org_id=user.org_id,
+        record_id=record.id,
+        values=payload.values,
+        recorded_at=payload.recorded_at,
+        source=payload.source,
+        provider_id=payload.provider_id,
+        notes=payload.notes,
+    )
+    db.add(vitals)
+    db.commit()
+    rule_payload = RuleEngine.validate_record(db, record)
+    _append_timeline(db, record, "vitals.recorded", "Vitals recorded", {"values": payload.values, "rule_status": rule_payload["status"]})
+    return {"status": rule_payload["status"], "errors": rule_payload.get("errors", [])}
+
+
+@router.post("/records/{record_id}/assessment", status_code=status.HTTP_201_CREATED)
+def add_assessment(
+    record_id: int,
+    payload: AssessmentEntry,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
+):
+    record = _get_record(db, user, record_id)
+    assessment = EpcrAssessment(
+        org_id=user.org_id,
+        record_id=record.id,
+        assessment_summary=payload.assessment_summary,
+        clinical_impression=payload.clinical_impression,
+        plan=payload.plan,
+        chief_complaint=payload.chief_complaint or record.chief_complaint,
+    )
+    db.add(assessment)
+    db.commit()
+    _append_timeline(db, record, "assessment.logged", "Assessment captured", payload.dict())
+    return {"id": assessment.id}
+
+
+@router.post("/records/{record_id}/intervention", status_code=status.HTTP_201_CREATED)
+def add_intervention(
+    record_id: int,
+    payload: InterventionEntry,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
+):
+    record = _get_record(db, user, record_id)
+    intervention = EpcrIntervention(
+        org_id=user.org_id,
+        record_id=record.id,
+        procedure_name=payload.procedure_name,
+        description=payload.description,
+        performed_at=payload.performed_at,
+        location=payload.location,
+        metadata=payload.metadata,
+    )
+    db.add(intervention)
+    db.commit()
+    _append_timeline(db, record, "intervention.logged", payload.procedure_name, payload.metadata)
+    BillingSyncService.map_to_billing(record, intervention)
+    return {"id": intervention.id}
+
+
+@router.post("/records/{record_id}/medication", status_code=status.HTTP_201_CREATED)
+def add_medication(
+    record_id: int,
+    payload: MedicationEntry,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
+):
+    record = _get_record(db, user, record_id)
+    medication = EpcrMedication(
+        org_id=user.org_id,
+        record_id=record.id,
+        medication_name=payload.medication_name,
+        ndc=payload.ndc,
+        dose=payload.dose,
+        units=payload.units,
+        route=payload.route,
+        administration_time=payload.administration_time,
+        metadata=payload.metadata,
+    )
+    db.add(medication)
+    db.commit()
+    BillingSyncService.map_to_billing(record, medication)
+    _append_timeline(db, record, "medication.administered", payload.medication_name, payload.metadata)
+    return {"id": medication.id}
+
+
+@router.post("/records/{record_id}/narrative", status_code=status.HTTP_201_CREATED)
+def add_narrative(
+    record_id: int,
+    payload: NarrativeEntry,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
+):
+    record = _get_record(db, user, record_id)
+    patient = scoped_query(db, Patient, user.org_id).filter(Patient.id == record.patient_id).first()
+    raw_transcription = payload.voice_transcription or payload.narrative_text or ""
+    refined_text = raw_transcription
+    if payload.voice_transcription:
+        refined_text = VoiceService.refine_transcription(raw_transcription, patient)
+        refined_text = VoiceService.generate_narrative_from_voice(refined_text, patient, payload.structured_data)
+
+    narrative = EpcrNarrative(
+        org_id=user.org_id,
+        record_id=record.id,
+        narrative_text=payload.narrative_text or refined_text,
+        ai_refined_text=refined_text,
+        generation_source=payload.origin,
+        metadata={"structured_data": payload.structured_data},
+    )
+    db.add(narrative)
+    db.commit()
+    AISuggestions.log_suggestion(record, narrative)
+    _append_timeline(db, record, "narrative.generated", "Narrative recorded", {"source": payload.origin})
+    return {"id": narrative.id}
+
+
+@router.post("/records/{record_id}/ocr", status_code=status.HTTP_201_CREATED)
+def add_ocr_snapshot(
+    record_id: int,
+    payload: OCRSnapshotEntry,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
+):
+    record = _get_record(db, user, record_id)
+    snapshot = OCRService.ingest_snapshot(db, record, payload.model_dump())
+    _append_timeline(db, record, "ocr.ingested", "OCR snapshot stored", {"device": payload.device_type})
+    return {"id": snapshot.id, "confidence": snapshot.confidence}
+
+
+@router.post("/records/{record_id}/post", status_code=status.HTTP_200_OK)
+def finalize_record(
+    record_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
+    _: User = Depends(require_on_shift),
+    __: User = Depends(require_trusted_device),
+):
+    record = _get_record(db, user, record_id)
+    validation = RuleEngine.validate_record(db, record)
+    status_value = validation.get("status", "fail")
     try:
-        threshold = float(raw_threshold)
-    except (TypeError, ValueError):
-        threshold = 0.8
-    return max(0.0, min(1.0, threshold))
-
-
-def _dob_similarity(left: str, right: str) -> tuple[float, list[str]]:
-    reasons = []
-    if not left or not right:
-        return 0.0, reasons
-    left_digits = _normalize_digits(left)
-    right_digits = _normalize_digits(right)
-    if not left_digits or not right_digits:
-        return 0.0, reasons
-    if left_digits == right_digits:
-        reasons.append("MPI.DOB.EXACT")
-        return 1.0, reasons
-    if len(left_digits) >= 6 and len(right_digits) >= 6 and left_digits[:6] == right_digits[:6]:
-        reasons.append("MPI.DOB.MONTHYEAR")
-        return 0.7, reasons
-    if len(left_digits) >= 4 and len(right_digits) >= 4 and left_digits[:4] == right_digits[:4]:
-        reasons.append("MPI.DOB.YEAR")
-        return 0.4, reasons
-    return 0.0, reasons
-
-
-def _phone_similarity(left: str, right: str) -> tuple[float, list[str]]:
-    reasons = []
-    left_digits = _normalize_digits(left or "")
-    right_digits = _normalize_digits(right or "")
-    if not left_digits or not right_digits:
-        return 0.0, reasons
-    if left_digits == right_digits:
-        reasons.append("MPI.PHONE.EXACT")
-        return 1.0, reasons
-    if len(left_digits) >= 7 and len(right_digits) >= 7 and left_digits[-7:] == right_digits[-7:]:
-        reasons.append("MPI.PHONE.LAST7")
-        return 0.7, reasons
-    if len(left_digits) >= 4 and len(right_digits) >= 4 and left_digits[-4:] == right_digits[-4:]:
-        reasons.append("MPI.PHONE.LAST4")
-        return 0.4, reasons
-    return 0.0, reasons
-
-
-def _compute_match(patient: Patient, master_patient: MasterPatient) -> tuple[float, list[str]]:
-    weights = _load_mpi_weights()
-    score = 0.0
-    reasons = []
-
-    first_similarity = _similarity(_normalize(patient.first_name), _normalize(master_patient.first_name))
-    if first_similarity == 1.0:
-        reasons.append("MPI.NAME.FIRST.EXACT")
-    elif first_similarity >= 0.85:
-        reasons.append("MPI.NAME.FIRST.NEAR")
-    elif first_similarity >= 0.6:
-        reasons.append("MPI.NAME.FIRST.PARTIAL")
-    score += weights.get("first_name", 0.0) * first_similarity
-
-    last_similarity = _similarity(_normalize(patient.last_name), _normalize(master_patient.last_name))
-    if last_similarity == 1.0:
-        reasons.append("MPI.NAME.LAST.EXACT")
-    elif last_similarity >= 0.85:
-        reasons.append("MPI.NAME.LAST.NEAR")
-    elif last_similarity >= 0.6:
-        reasons.append("MPI.NAME.LAST.PARTIAL")
-    score += weights.get("last_name", 0.0) * last_similarity
-
-    dob_similarity, dob_reasons = _dob_similarity(patient.date_of_birth, master_patient.date_of_birth)
-    reasons.extend(dob_reasons)
-    score += weights.get("date_of_birth", 0.0) * dob_similarity
-
-    phone_similarity, phone_reasons = _phone_similarity(patient.phone, master_patient.phone)
-    reasons.extend(phone_reasons)
-    score += weights.get("phone", 0.0) * phone_similarity
-
-    return round(score, 4), reasons
-
-
-def _map_ocr_fields(patient: Patient, fields: list[dict]) -> None:
-    mapping = {
-        "heart_rate": ("vitals", "hr"),
-        "pulse_rate": ("vitals", "pulse"),
-        "spo2": ("vitals", "spo2"),
-        "bp_systolic": ("vitals", "bp_systolic"),
-        "bp_diastolic": ("vitals", "bp_diastolic"),
-        "etco2": ("vitals", "etco2"),
-        "temperature": ("vitals", "temp"),
-    }
-    for entry in fields:
-        key = entry.get("field")
-        value = entry.get("value")
-        mapped = mapping.get(key)
-        if mapped:
-            bucket, field = mapped
-            current = getattr(patient, bucket) or {}
-            current[field] = value
-            setattr(patient, bucket, current)
-        if key == "medication_name" and value:
-            entry_payload = {"name": value, "source": entry.get("source") or "ocr"}
-            patient.medications = list(patient.medications or []) + [entry_payload]
-        if key == "procedure" and value:
-            patient.procedures = list(patient.procedures or []) + [value]
-
-    if any(entry.get("source") == "ventilator" for entry in fields):
-        details = {entry.get("field"): entry.get("value") for entry in fields if entry.get("field") in OCR_DEVICE_TYPES["ventilator"]}
-        if details:
-            patient.cct_interventions = list(patient.cct_interventions or []) + [
-                {"intervention": "Ventilator", "details": details}
-            ]
-    pump_fields = {entry.get("field"): entry.get("value") for entry in fields if entry.get("source") == "pump"}
-    if pump_fields.get("medication_name"):
-        med_detail = {
-            "name": pump_fields.get("medication_name"),
-            "dose_rate": pump_fields.get("dose_rate"),
-            "dose_units": pump_fields.get("dose_units"),
-            "concentration": pump_fields.get("concentration"),
-            "volume_remaining": pump_fields.get("volume_remaining"),
-            "source": "pump",
-        }
-        patient.medications = list(patient.medications or []) + [med_detail]
-
-
-@router.get("/patients/{patient_id}", response_model=PatientResponse)
-def get_patient(
-    patient_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_roles()),
-):
-    patient = get_scoped_record(db, request, Patient, patient_id, user, resource_label="epcr")
-    audit_and_event(
-        db=db,
-        request=request,
-        user=user,
-        action="read",
-        resource="epcr_patient",
-        classification=patient.classification,
-        after_state=model_snapshot(patient),
-        event_type="RECORD_ACCESSED",
-        event_payload={"patient_id": patient.id, "resource": "epcr"},
-        reason_code="READ",
+        status_enum = NEMSISValidationStatus(status_value)
+    except ValueError:
+        status_enum = NEMSISValidationStatus.FAIL
+    validation_entry = NEMSISValidationResult(
+        org_id=user.org_id,
+        epcr_patient_id=record.patient_id,
+        status=status_enum,
+        missing_fields=validation.get("missing_fields", []),
+        validation_errors=validation.get("errors", []),
+        validator_version="rule-engine-1.0",
     )
-    return patient
+    record.status = EpcrRecordStatus.FINALIZED
+    record.finalized_at = datetime.now(timezone.utc)
+    record.finalized_by = user.id
+    db.add(validation_entry)
+    db.commit()
+    AISuggestions.suggest_protocol(record)
+    NEMSISExporter.export_record_to_nemsis(record)
+    OfflineSyncManager.queue_record(db, record)
+    HospitalNotificationService.queue_notification(db, record)
+    CADSyncService.sync_incident(db, record)
+    _append_timeline(db, record, "record.finalized", "Record posted", {"validation": validation})
+    return {"record_id": record.id, "validation": validation}
 
 
-@router.get("/patients/{patient_id}/repeat_candidates", response_model=list[RepeatCandidate])
-def repeat_candidates(
-    patient_id: int,
-    request: Request,
+@router.get("/records/{record_id}/timeline", response_model=List[TimelineEvent])
+def get_timeline(
+    record_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
 ):
-    patient = get_scoped_record(db, request, Patient, patient_id, user, resource_label="epcr")
-    linked_ids = {
-        link.master_patient_id
-        for link in db.query(MasterPatientLink)
-        .filter(MasterPatientLink.epcr_patient_id == patient.id)
-        .all()
-    }
-    candidates = []
-    for master_patient in (
-        scoped_query(db, MasterPatient, user.org_id, request.state.training_mode)
-        .filter(MasterPatient.merged_into_id.is_(None))
-        .all()
-    ):
-        if master_patient.id in linked_ids:
-            continue
-        score, reasons = _compute_match(patient, master_patient)
-        if score >= _load_mpi_threshold():
-            candidates.append(
-                RepeatCandidate(
-                    master_patient_id=master_patient.id, score=score, reasons=reasons
-                )
-            )
-    candidates.sort(key=lambda item: item.score, reverse=True)
-    audit_and_event(
-        db=db,
-        request=request,
-        user=user,
-        action="read",
-        resource="epcr_master_patient_candidate",
-        classification=patient.classification,
-        after_state={"patient_id": patient.id, "candidates": [c.model_dump() for c in candidates]},
-        event_type="epcr.patient.repeat_candidates.requested",
-        event_payload={"patient_id": patient.id, "candidate_count": len(candidates)},
-    )
-    return candidates
+    record = _get_record(db, user, record_id)
+    events = db.query(EpcrTimeline).filter(EpcrTimeline.record_id == record.id).order_by(EpcrTimeline.timestamp.asc()).all()
+    return events
 
 
-@router.post("/patients/{patient_id}/link_master_patient", status_code=status.HTTP_201_CREATED)
-def link_master_patient(
-    patient_id: int,
-    payload: MasterPatientLinkCreate,
-    request: Request,
+@router.get("/records/{record_id}/validation", response_model=ValidationStatusResponse)
+def get_validation_status(
+    record_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
 ):
-    patient = get_scoped_record(db, request, Patient, patient_id, user, resource_label="epcr")
-    master_patient = get_scoped_record(
-        db, request, MasterPatient, payload.master_patient_id, user, resource_label="master_patient"
-    )
-    if master_patient.merged_into_id is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Master patient already merged")
-    existing = (
-        db.query(MasterPatientLink)
-        .filter(
-            MasterPatientLink.epcr_patient_id == patient.id,
-        )
+    record = _get_record(db, user, record_id)
+    validation = (
+        db.query(NEMSISValidationResult)
+        .filter(NEMSISValidationResult.epcr_patient_id == record.patient_id)
+        .order_by(NEMSISValidationResult.validation_timestamp.desc())
         .first()
     )
-    if existing:
-        if existing.master_patient_id == master_patient.id:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Link already exists")
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Patient already linked to master patient")
-    link = MasterPatientLink(
-        org_id=user.org_id,
-        epcr_patient_id=patient.id,
-        master_patient_id=master_patient.id,
-        provenance=payload.provenance,
-    )
-    apply_training_mode(link, request)
-    db.add(link)
-    db.commit()
-    db.refresh(link)
-    audit_and_event(
-        db=db,
-        request=request,
-        user=user,
-        action="link",
-        resource="master_patient_link",
-        classification=patient.classification,
-        after_state=model_snapshot(link),
-        event_type="epcr.master_patient.linked",
-        event_payload={
-            "patient_id": patient.id,
-            "master_patient_id": master_patient.id,
-            "provenance": payload.provenance,
-        },
-    )
-    return {"status": "linked", "link_id": link.id}
-
-
-@router.post("/patients/{patient_id}/ocr", status_code=status.HTTP_201_CREATED)
-def ingest_ocr(
-    patient_id: int,
-    payload: OCRIngest,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
-    _: User = Depends(require_on_shift),
-    __: User = Depends(require_trusted_device),
-):
-    builder = DecisionBuilder(component="ocr_validator", component_version="v1")
-    if payload.device_type not in OCR_DEVICE_TYPES:
-        builder.add_reason(
-            "OCR.DEVICE.UNSUPPORTED.v1",
-            "Device type is not supported for OCR ingestion.",
-            severity="High",
-            decision="BLOCK",
-        )
-        decision = finalize_decision_packet(
-            db=db,
-            request=request,
-            user=user,
-            builder=builder,
-            input_payload=payload.model_dump(),
-            classification="PHI",
-            action="ocr_ingest",
-            resource="epcr_patient",
-            reason_code="SMART_POLICY",
-        )
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=decision)
-    raw_fields = payload.fields
-    if isinstance(raw_fields, dict):
-        structured_fields = [
-            {
-                "field": key,
-                "value": value,
-                "confidence": payload.confidence or 0.0,
-                "bbox": None,
-                "page": None,
-                "source": payload.device_type,
-            }
-            for key, value in raw_fields.items()
-        ]
-    else:
-        structured_fields = [
-            {
-                "field": entry_dict.get("field"),
-                "value": entry_dict.get("value"),
-                "confidence": entry_dict.get("confidence", payload.confidence or 0.0),
-                "bbox": entry_dict.get("bbox"),
-                "page": entry_dict.get("page"),
-                "source": entry_dict.get("source") or payload.device_type,
-            }
-            for entry_dict in [
-                entry.model_dump() if hasattr(entry, "dict") else entry for entry in raw_fields
-            ]
-        ]
-    for entry in structured_fields:
-        entry["hash"] = hash_payload(entry)
-        entry["evidence_hash"] = builder.add_evidence(
-            "ocr_field",
-            f"ocr:{payload.device_type}",
-            {
-                "field": entry.get("field"),
-                "value": entry.get("value"),
-                "confidence": entry.get("confidence"),
-            },
-        )
-    unknown_fields = [
-        entry["field"]
-        for entry in structured_fields
-        if entry.get("field") not in OCR_DEVICE_TYPES[payload.device_type]
-    ]
-    patient = get_scoped_record(db, request, Patient, patient_id, user, resource_label="epcr")
-    enforce_legal_hold(db, user.org_id, "epcr_patient", str(patient.id), "update")
-    before = model_snapshot(patient)
-    snapshot = payload.model_dump()
-    snapshot["fields"] = structured_fields
-    snapshot["unknown_fields"] = unknown_fields
-    low_conf_fields = [field for field in structured_fields if field.get("confidence", 0) < OCR_MIN_CONFIDENCE]
-    snapshot["requires_review"] = bool(low_conf_fields)
-    snapshots = list(patient.ocr_snapshots or [])
-    snapshots.append(snapshot)
-    patient.ocr_snapshots = snapshots
-    _map_ocr_fields(patient, structured_fields)
-    conflict_refs = []
-    for field in structured_fields:
-        field_name = field.get("field")
-        field_value = str(field.get("value") or "").strip()
-        if field_name == "first_name" and field_value and field_value != patient.first_name:
-            conflict_refs.append(field.get("evidence_hash"))
-        if field_name == "last_name" and field_value and field_value != patient.last_name:
-            conflict_refs.append(field.get("evidence_hash"))
-        if field_name == "date_of_birth" and field_value and field_value != patient.date_of_birth:
-            conflict_refs.append(field.get("evidence_hash"))
-        if field_name == "dnr" and field_value.lower() in {"true", "yes", "dnr", "do not resuscitate"}:
-            conflict_refs.append(field.get("evidence_hash"))
-    db.commit()
-    audit_and_event(
-        db=db,
-        request=request,
-        user=user,
-        action="update",
-        resource="epcr_patient",
-        classification=patient.classification,
-        before_state=before,
-        after_state=model_snapshot(patient),
-        event_type="epcr.patient.ocr_ingested",
-        event_payload={"patient_id": patient.id, "source": "ocr"},
-    )
-    for field in low_conf_fields:
-        builder.add_reason(
-            "OCR.CONFIDENCE.REQUIRE_CONFIRM.v1",
-            f"Low confidence for field {field.get('field')}.",
-            severity="Medium",
-            decision="REQUIRE_CONFIRMATION",
-            evidence_refs=[field.get("evidence_hash")],
-        )
-    if conflict_refs:
-        builder.add_reason(
-            "OCR.CONFLICT.DEMOGRAPHICS.v1",
-            "OCR values conflict with patient demographics.",
-            severity="High",
-            decision="REQUIRE_CONFIRMATION",
-            evidence_refs=conflict_refs,
-        )
-    if unknown_fields:
-        builder.add_reason(
-            "OCR.FIELD.UNKNOWN.WARN.v1",
-            "OCR contained fields that are not mapped for this device type.",
-            severity="Low",
-            decision="WARN",
-            evidence_refs=[
-                field.get("evidence_hash")
-                for field in structured_fields
-                if field.get("field") in unknown_fields
-            ],
-        )
-    if not builder.reasons:
-        builder.add_reason(
-            "OCR.INGEST.ALLOW.v1",
-            "OCR ingestion succeeded with no policy conflicts.",
-            severity="Low",
-            decision="ALLOW",
-        )
-    decision = finalize_decision_packet(
-        db=db,
-        request=request,
-        user=user,
-        builder=builder,
-        input_payload={"patient_id": patient.id, "device_type": payload.device_type, "fields": structured_fields},
-        classification=patient.classification,
-        action="ocr_ingest",
-        resource="epcr_patient",
-        reason_code="SMART_POLICY",
-    )
-    event_bus.publish(
-        db=db,
-        org_id=user.org_id,
-        event_type="ocr.ingested",
-        payload={
-            "patient_id": patient.id,
-            "device_type": payload.device_type,
-            "field_hashes": [field.get("evidence_hash") for field in structured_fields],
-            "decision": decision.get("decision"),
-        },
-        actor_id=user.id,
-        actor_role=user.role,
-        device_id=request.headers.get("x-device-id", ""),
-        server_time=getattr(request.state, "server_time", None),
-        drift_seconds=getattr(request.state, "drift_seconds", 0),
-        drifted=getattr(request.state, "drifted", False),
-        training_mode=getattr(request.state, "training_mode", False),
-    )
-    return {
-        "status": "ingested",
-        "patient_id": patient.id,
-        "snapshots": len(snapshots),
-        "unknown_fields": unknown_fields,
-        "requires_review": snapshot["requires_review"],
-        "decision": decision,
-    }
-
-
-@router.get("/ocr/profiles")
-def list_ocr_profiles():
-    return {"device_types": OCR_DEVICE_TYPES, "min_confidence": OCR_MIN_CONFIDENCE}
-
-
-@router.post("/patients/{patient_id}/narrative")
-def update_narrative(
-    patient_id: int,
-    payload: NarrativeUpdate,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
-    _: User = Depends(require_on_shift),
-    __: User = Depends(require_trusted_device),
-):
-    patient = get_scoped_record(db, request, Patient, patient_id, user, resource_label="epcr")
-    enforce_legal_hold(db, user.org_id, "epcr_patient", str(patient.id), "update")
-    before = model_snapshot(patient)
-    patient.narrative = payload.narrative
-    db.commit()
-    audit_and_event(
-        db=db,
-        request=request,
-        user=user,
-        action="update",
-        resource="epcr_patient",
-        classification=patient.classification,
-        before_state=before,
-        after_state=model_snapshot(patient),
-        event_type="epcr.patient.narrative.updated",
-        event_payload={"patient_id": patient.id, "field": "narrative"},
-    )
-    return {"status": "ok", "patient_id": patient.id}
-
-
-@router.post("/patients/{patient_id}/labs", status_code=status.HTTP_201_CREATED)
-def add_lab(
-    patient_id: int,
-    payload: LabEntry,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
-    _: User = Depends(require_on_shift),
-    __: User = Depends(require_trusted_device),
-):
-    patient = get_scoped_record(db, request, Patient, patient_id, user, resource_label="epcr")
-    enforce_legal_hold(db, user.org_id, "epcr_patient", str(patient.id), "update")
-    before = model_snapshot(patient)
-    labs = list(patient.labs or [])
-    labs.append(payload.model_dump())
-    patient.labs = labs
-    db.commit()
-    audit_and_event(
-        db=db,
-        request=request,
-        user=user,
-        action="update",
-        resource="epcr_patient",
-        classification=patient.classification,
-        before_state=before,
-        after_state=model_snapshot(patient),
-        event_type="epcr.patient.labs.added",
-        event_payload={"patient_id": patient.id, "lab_type": payload.lab_type},
-    )
-    return {"status": "ok", "patient_id": patient.id}
-
-
-@router.post("/patients/{patient_id}/cct", status_code=status.HTTP_201_CREATED)
-def add_cct_intervention(
-    patient_id: int,
-    payload: CCTIntervention,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
-    _: User = Depends(require_on_shift),
-    __: User = Depends(require_trusted_device),
-):
-    patient = get_scoped_record(db, request, Patient, patient_id, user, resource_label="epcr")
-    enforce_legal_hold(db, user.org_id, "epcr_patient", str(patient.id), "update")
-    before = model_snapshot(patient)
-    entries = list(patient.cct_interventions or [])
-    entries.append(payload.model_dump())
-    patient.cct_interventions = entries
-    db.commit()
-    audit_and_event(
-        db=db,
-        request=request,
-        user=user,
-        action="update",
-        resource="epcr_patient",
-        classification=patient.classification,
-        before_state=before,
-        after_state=model_snapshot(patient),
-        event_type="epcr.patient.cct.added",
-        event_payload={"patient_id": patient.id, "intervention": payload.intervention},
-    )
-    return {"status": "ok", "patient_id": patient.id}
-
-
-@router.get("/patients/{patient_id}/nemsis/validate")
-def validate_nemsis(
-    patient_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
-):
-    patient = get_scoped_record(db, request, Patient, patient_id, user, resource_label="epcr")
-    ruleset = NEMSIS_RULES.get(getattr(patient, "nemsis_state", "WI"), NEMSIS_RULES["WI"])
-    required = [(field, getattr(patient, field, None)) for field in ruleset["required"]]
-    required.extend(
-        [
-            (f"vitals.{key}", patient.vitals.get(key) if patient.vitals else None)
-            for key in ruleset["vitals"]
-        ]
-    )
-    if patient.chart_locked and not patient.narrative:
-        required.append(("narrative", None))
-    if patient.cct_interventions and not patient.labs:
-        required.append(("labs", None))
-    if patient.cct_interventions:
-        vent_checks = [
-            entry
-            for entry in patient.cct_interventions
-            if entry.get("intervention") == "Ventilator"
-        ]
-        if vent_checks:
-            vent_details = vent_checks[-1].get("details", {})
-            for key in ruleset["ventilator_fields"]:
-                if not vent_details.get(key):
-                    required.append((f"ventilator.{key}", None))
-    missing = [field for field, value in required if not value]
-    ocr_review = [
-        snapshot for snapshot in (patient.ocr_snapshots or []) if snapshot.get("requires_review")
-    ]
-    status_label = "PASS" if not missing else "FAIL"
-    return {
-        "status": status_label,
-        "missing": missing,
-        "version": patient.nemsis_version,
-        "ocr_review_required": len(ocr_review),
-    }
-
-
-@router.get("/patients/{patient_id}/exports/nemsis")
-def export_nemsis(
-    patient_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
-):
-    patient = get_scoped_record(db, request, Patient, patient_id, user, resource_label="epcr")
-    payload = {
-        "nemsis_version": patient.nemsis_version,
-        "incident_number": patient.incident_number,
-        "patient": {
-            "first_name": patient.first_name,
-            "last_name": patient.last_name,
-            "date_of_birth": patient.date_of_birth,
-        },
-        "vitals": patient.vitals,
-        "procedures": patient.procedures,
-        "medications": patient.medications,
-        "labs": patient.labs,
-        "cct_interventions": patient.cct_interventions,
-        "narrative": patient.narrative,
-    }
-    return {"status": "ok", "export": payload}
-
-
-@router.get("/patients", response_model=list[PatientResponse])
-def list_patients(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_roles()),
-):
-    return scoped_query(db, Patient, user.org_id, request.state.training_mode).order_by(
-        Patient.created_at.desc()
-    ).all()
-
-
-@router.post("/patients/{patient_id}/lock")
-def lock_chart(
-    patient_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
-):
-    patient = get_scoped_record(db, request, Patient, patient_id, user, resource_label="epcr")
-    enforce_legal_hold(db, user.org_id, "epcr_patient", str(patient.id), "update")
-    before = model_snapshot(patient)
-    patient.chart_locked = True
-    patient.locked_at = datetime.now(timezone.utc)
-    patient.locked_by = user.email
-    db.commit()
-    audit_and_event(
-        db=db,
-        request=request,
-        user=user,
-        action="update",
-        resource="epcr_patient",
-        classification=patient.classification,
-        before_state=before,
-        after_state=model_snapshot(patient),
-        event_type="CHART_LOCKED",
-        event_payload={"patient_id": patient.id, "locked_by": user.email},
-    )
-    return {"status": "locked", "patient_id": patient.id}
+    if not validation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No validation results yet")
+    return validation

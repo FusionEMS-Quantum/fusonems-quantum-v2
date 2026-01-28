@@ -1,4 +1,4 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
@@ -11,7 +11,7 @@ RUN npm ci
 # Copy source code
 COPY src ./src
 COPY public ./public
-COPY tsconfig.json next.config.js ./
+COPY tsconfig.json next.config.ts ./
 
 # Build Next.js
 RUN npm run build

@@ -1,1 +1,227 @@
-"use client"\n\nimport { useEffect, useState } from \"react\"\nimport Link from \"next/link\"\nimport { apiFetch } from \"../../lib/api\"\nimport ClaimCard from \"../../components/billing/ClaimCard\"\nimport DenialRiskBadge from \"../../components/billing/DenialRiskBadge\"\nimport FacesheetStatus from \"../../components/billing/FacesheetStatus\"\nimport AIAssistPanel from \"../../components/billing/AIAssistPanel\"\nimport OfficeAllyTracker from \"../../components/billing/OfficeAllyTracker\"\n\ntype ConsoleSummary = {\n  counts: {\n    pending: number\n    ready: number\n    submitted: number\n    denied: number\n    paid_mtd: number\n  }\n  facesheet_gaps: number\n  ai_insights: { id: number; type: string; description: string; created_at?: string }[]\n}\n\ntype ClaimReady = {\n  id: number\n  payer: string\n  status: string\n  denial_risks: string[]\n  office_ally_batch_id?: string\n  created_at?: string\n}\n\ntype CallQueueEntry = {\n  id: number\n  intent: string\n  resolution: string\n  created_at?: string\n}\n\nexport default function BillingDashboard() {\n  const [summary, setSummary] = useState<ConsoleSummary | null>(null)\n  const [readyClaims, setReadyClaims] = useState<ClaimReady[]>([])\n  const [callQueue, setCallQueue] = useState<CallQueueEntry[]>([])\n  const [loading, setLoading] = useState(false)\n\n  useEffect(() => {\n    fetchSummary()\n    fetchReadyClaims()\n    fetchCallQueue()\n  }, [])\n\n  const fetchSummary = async () => {\n    setLoading(true)\n    try {\n      const data = await apiFetch<ConsoleSummary>(\"/billing/console/summary\")\n      setSummary(data)\n    } catch (error) {\n      console.error(error)\n    } finally {\n      setLoading(false)\n    }\n  }\n\n  const fetchReadyClaims = async () => {\n    try {\n      const data = await apiFetch<ClaimReady[]>(\"/billing/console/claims-ready\")\n      setReadyClaims(data)\n    } catch (error) {\n      console.error(error)\n    }\n  }\n\n  const fetchCallQueue = async () => {\n    try {\n      const data = await apiFetch<CallQueueEntry[]>(\"/billing/console/call-queue\")\n      setCallQueue(data)\n    } catch (error) {\n      console.error(error)\n    }\n  }\n\n  const cards = [\n    { label: \"Pending\", value: summary?.counts.pending ?? 0 },\n    { label: \"Ready\", value: summary?.counts.ready ?? 0 },\n    { label: \"Submitted\", value: summary?.counts.submitted ?? 0 },\n    { label: \"Denied\", value: summary?.counts.denied ?? 0 },\n    { label: \"Paid (MTD)\", value: summary?.counts.paid_mtd ?? 0 },\n  ]\n\n  return (\n    <main className=\"page-shell\" style={{ minHeight: \"100vh\" }}>\n      <div className=\"page-container\">\n        <section className=\"glass-panel\" style={{ padding: \"2rem\" }}>\n          <header style={{ display: \"flex\", justifyContent: \"space-between\", alignItems: \"center\" }}>\n            <div>\n              <p className=\"section-title\" style={{ margin: 0 }}>Billing Dashboard</p>\n              <p className=\"section-subtitle\">Live status for claims, AI, facesheets, and calls.</p>\n            </div>\n            <button\n              type=\"button\"\n              onClick={fetchSummary}\n              style={{\n                borderRadius: 8,\n                border: \"1px solid rgba(255,255,255,0.3)\",\n                background: \"transparent\",\n                color: \"#f7f6f3\",\n                padding: \"0.4rem 1rem\",\n                cursor: \"pointer\",\n              }}\n            >\n              Refresh\n            </button>\n          </header>\n          <div\n            style={{\n              display: \"grid\",\n              gridTemplateColumns: \"repeat(auto-fit, minmax(140px, 1fr))\",\n              gap: \"1rem\",\n              marginTop: \"1.5rem\",\n            }}\n          >\n            {cards.map((card) => (\n              <div\n                key={card.label}\n                style={{\n                  padding: \"1rem\",\n                  borderRadius: 12,\n                  background: \"rgba(12,12,12,0.7)\",\n                  border: \"1px solid rgba(255,255,255,0.08)\",\n                }}\n              >\n                <p style={{ margin: 0, color: \"#bbb\" }}>{card.label}</p>\n                <strong style={{ fontSize: \"1.6rem\", color: \"#ff7c29\" }}>{card.value}</strong>\n              </div>\n            ))}\n          </div>\n          <div\n            style={{\n              display: \"grid\",\n              gridTemplateColumns: \"repeat(auto-fit, minmax(280px, 1fr))\",\n              gap: \"1rem\",\n              marginTop: \"1.5rem\",\n            }}\n          >\n            <FacesheetStatus\n              present={!summary || summary.facesheet_gaps === 0}\n              missingFields={!summary || summary.facesheet_gaps > 0 ? [\"demographics\"] : []}\n            />\n            <OfficeAllyTracker status={summary ? \"monitoring\" : \"idle\"} />\n            <AIAssistPanel\n              cards={summary?.ai_insights.map((insight) => ({\n                title: insight.type.replace(\"_\", \" \"),\n                summary: insight.description || \"AI insight available\",\n                footer: insight.created_at ? new Date(insight.created_at).toLocaleString() : undefined,\n              }))}\n            />\n          </div>\n        </section>\n        <section className=\"glass-panel\" style={{ marginTop: \"1.5rem\", padding: \"2rem\" }}>\n          <header style={{ display: \"flex\", justifyContent: \"space-between\", alignItems: \"center\" }}>\n            <div>\n              <p className=\"section-title\" style={{ margin: 0 }}>Claims Ready to Submit</p>\n              <p style={{ margin: 0, color: \"#bbb\", fontSize: \"0.9rem\" }}>\n                One click submit uses Office Ally export endpoint.\n              </p>\n            </div>\n            <Link href=\"/billing/claims-ready\" className=\"cta-button cta-secondary\">\n              Full view\n            </Link>\n          </header>\n          <div\n            style={{\n              display: \"grid\",\n              gap: \"1rem\",\n              marginTop: \"1.2rem\",\n            }}\n          >\n            {readyClaims.map((claim) => (\n              <ClaimCard\n                key={claim.id}\n                id={claim.id}\n                payer={claim.payer}\n                status={claim.status}\n                denialRisks={claim.denial_risks}\n                createdAt={claim.created_at}\n                officeAllyBatch={claim.office_ally_batch_id}\n                onSubmit={() => {\n                  fetch(`/api/billing/claims/${claim.id}/export/office_ally`, { method: \"GET\" })\n                  fetchSummary()\n                }}\n              />\n            ))}\n            {!readyClaims.length && <p style={{ color: \"#bbb\" }}>No ready claims today.</p>}\n          </div>\n        </section>\n        <section className=\"glass-panel\" style={{ marginTop: \"1.5rem\", padding: \"2rem\" }}>\n          <header>\n            <p className=\"section-title\" style={{ margin: 0 }}>Call Queue</p>\n          </header>\n          <div style={{ marginTop: \"1rem\" }}>\n            <table style={{ width: \"100%\", borderCollapse: \"collapse\" }}>\n              <thead>\n                <tr>\n                  <th style={{ textAlign: \"left\", padding: \"0.5rem\", color: \"#bbb\" }}>ID</th>\n                  <th style={{ textAlign: \"left\", padding: \"0.5rem\", color: \"#bbb\" }}>Intent</th>\n                  <th style={{ textAlign: \"left\", padding: \"0.5rem\", color: \"#bbb\" }}>Resolution</th>\n                  <th style={{ textAlign: \"left\", padding: \"0.5rem\", color: \"#bbb\" }}>Received</th>\n                </tr>\n              </thead>\n              <tbody>\n                {callQueue.map((entry) => (\n                  <tr key={entry.id} style={{ borderTop: \"1px solid rgba(255,255,255,0.05)\" }}>\n                    <td style={{ padding: \"0.65rem\", color: \"#f7f6f3\" }}>{entry.id}</td>\n                    <td style={{ padding: \"0.65rem\", color: \"#f7f6f3\" }}>{entry.intent}</td>\n                    <td style={{ padding: \"0.65rem\", color: \"#f7f6f3\" }}>{entry.resolution || \"pending\"}</td>\n                    <td style={{ padding: \"0.65rem\", color: \"#f7f6f3\" }}>{entry.created_at ? new Date(entry.created_at).toLocaleTimeString() : \"n/a\"}</td>\n                  </tr>\n                ))}\n              </tbody>\n            </table>\n            {!callQueue.length && <p style={{ color: \"#bbb\", marginTop: \"1rem\" }}>No active calls.</p>}\n          </div>\n        </section>\n      </div>\n    </main>\n  )\n}\n*** End Patch*** 
+"use client"
+
+import { useEffect, useState } from "react"
+import Link from "next/link"
+import { apiFetch } from "@/lib/api"
+import ClaimCard from "@/components/billing/ClaimCard"
+import DenialRiskBadge from "@/components/billing/DenialRiskBadge"
+import FacesheetStatus from "@/components/billing/FacesheetStatus"
+import AIAssistPanel from "@/components/billing/AIAssistPanel"
+import OfficeAllyTracker from "@/components/billing/OfficeAllyTracker"
+
+type ConsoleSummary = {
+  counts: {
+    pending: number
+    ready: number
+    submitted: number
+    denied: number
+    paid_mtd: number
+  }
+  facesheet_gaps: number
+  ai_insights: { id: number; type: string; description: string; created_at?: string }[]
+}
+
+type ClaimReady = {
+  id: number
+  payer: string
+  status: string
+  denial_risks: string[]
+  office_ally_batch_id?: string
+  created_at?: string
+}
+
+type CallQueueEntry = {
+  id: number
+  intent: string
+  resolution: string
+  created_at?: string
+}
+
+export default function BillingDashboard() {
+  const [summary, setSummary] = useState<ConsoleSummary | null>(null)
+  const [readyClaims, setReadyClaims] = useState<ClaimReady[]>([])
+  const [callQueue, setCallQueue] = useState<CallQueueEntry[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    fetchSummary()
+    fetchReadyClaims()
+    fetchCallQueue()
+  }, [])
+
+  const fetchSummary = async () => {
+    setLoading(true)
+    try {
+      const data = await apiFetch<ConsoleSummary>("/billing/console/summary")
+      setSummary(data)
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchReadyClaims = async () => {
+    try {
+      const data = await apiFetch<ClaimReady[]>("/billing/console/claims-ready")
+      setReadyClaims(data)
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  const fetchCallQueue = async () => {
+    try {
+      const data = await apiFetch<CallQueueEntry[]>("/billing/console/call-queue")
+      setCallQueue(data)
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  const cards = [
+    { label: "Pending", value: summary?.counts.pending ?? 0 },
+    { label: "Ready", value: summary?.counts.ready ?? 0 },
+    { label: "Submitted", value: summary?.counts.submitted ?? 0 },
+    { label: "Denied", value: summary?.counts.denied ?? 0 },
+    { label: "Paid (MTD)", value: summary?.counts.paid_mtd ?? 0 },
+  ]
+
+  return (
+    <main className="page-shell" style={{ minHeight: "100vh" }}>
+      <div className="page-container">
+        <section className="glass-panel" style={{ padding: "2rem" }}>
+          <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <p className="section-title" style={{ margin: 0 }}>Billing Dashboard</p>
+              <p className="section-subtitle">Live status for claims, AI, facesheets, and calls.</p>
+            </div>
+            <button
+              type="button"
+              onClick={fetchSummary}
+              style={{
+                borderRadius: 8,
+                border: "1px solid rgba(255,255,255,0.3)",
+                background: "transparent",
+                color: "#f7f6f3",
+                padding: "0.4rem 1rem",
+                cursor: "pointer",
+              }}
+            >
+              Refresh
+            </button>
+          </header>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+              gap: "1rem",
+              marginTop: "1.5rem",
+            }}
+          >
+            {cards.map((card) => (
+              <div
+                key={card.label}
+                style={{
+                  padding: "1rem",
+                  borderRadius: 12,
+                  background: "rgba(12,12,12,0.7)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                }}
+              >
+                <p style={{ margin: 0, color: "#bbb" }}>{card.label}</p>
+                <strong style={{ fontSize: "1.6rem", color: "#ff7c29" }}>{card.value}</strong>
+              </div>
+            ))}
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+              gap: "1rem",
+              marginTop: "1.5rem",
+            }}
+          >
+            <FacesheetStatus
+              present={!summary || summary.facesheet_gaps === 0}
+              missingFields={!summary || summary.facesheet_gaps > 0 ? ["demographics"] : []}
+            />
+            <OfficeAllyTracker status={summary ? "monitoring" : "idle"} />
+            <AIAssistPanel
+              cards={summary?.ai_insights.map((insight) => ({
+                title: insight.type.replace("_", " "),
+                summary: insight.description || "AI insight available",
+                footer: insight.created_at ? new Date(insight.created_at).toLocaleString() : undefined,
+              }))}
+            />
+          </div>
+        </section>
+        <section className="glass-panel" style={{ marginTop: "1.5rem", padding: "2rem" }}>
+          <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <p className="section-title" style={{ margin: 0 }}>Claims Ready to Submit</p>
+              <p style={{ margin: 0, color: "#bbb", fontSize: "0.9rem" }}>
+                One click submit uses Office Ally export endpoint.
+              </p>
+            </div>
+            <Link href="/billing/claims-ready" className="cta-button cta-secondary">
+              Full view
+            </Link>
+          </header>
+          <div
+            style={{
+              display: "grid",
+              gap: "1rem",
+              marginTop: "1.2rem",
+            }}
+          >
+            {readyClaims.map((claim) => (
+              <ClaimCard
+                key={claim.id}
+                id={claim.id}
+                payer={claim.payer}
+                status={claim.status}
+                denialRisks={claim.denial_risks}
+                createdAt={claim.created_at}
+                officeAllyBatch={claim.office_ally_batch_id}
+                onSubmit={() => {
+                  fetch(`/api/billing/claims/${claim.id}/export/office_ally`, { method: "GET" })
+                  fetchSummary()
+                }}
+              />
+            ))}
+            {!readyClaims.length && <p style={{ color: "#bbb" }}>No ready claims today.</p>}
+          </div>
+        </section>
+        <section className="glass-panel" style={{ marginTop: "1.5rem", padding: "2rem" }}>
+          <header>
+            <p className="section-title" style={{ margin: 0 }}>Call Queue</p>
+          </header>
+          <div style={{ marginTop: "1rem" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", padding: "0.5rem", color: "#bbb" }}>ID</th>
+                  <th style={{ textAlign: "left", padding: "0.5rem", color: "#bbb" }}>Intent</th>
+                  <th style={{ textAlign: "left", padding: "0.5rem", color: "#bbb" }}>Resolution</th>
+                  <th style={{ textAlign: "left", padding: "0.5rem", color: "#bbb" }}>Received</th>
+                </tr>
+              </thead>
+              <tbody>
+                {callQueue.map((entry) => (
+                  <tr key={entry.id} style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                    <td style={{ padding: "0.65rem", color: "#f7f6f3" }}>{entry.id}</td>
+                    <td style={{ padding: "0.65rem", color: "#f7f6f3" }}>{entry.intent}</td>
+                    <td style={{ padding: "0.65rem", color: "#f7f6f3" }}>{entry.resolution || "pending"}</td>
+                    <td style={{ padding: "0.65rem", color: "#f7f6f3" }}>{entry.created_at ? new Date(entry.created_at).toLocaleTimeString() : "n/a"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!callQueue.length && <p style={{ color: "#bbb", marginTop: "1rem" }}>No active calls.</p>}
+          </div>
+        </section>
+      </div>
+    </main>
+  )
+}

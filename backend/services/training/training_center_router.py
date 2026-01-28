@@ -8,13 +8,11 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.guards import require_module
 from core.security import require_roles
-from models.training_center import (
-    CERecord,
-    CredentialRecord,
-    SkillCheckoff,
+from models import (
     TrainingCourse,
     TrainingEnrollment,
 )
+from models.training_management import CredentialRecord, SkillCheckoff, CERecord
 from models.user import User, UserRole
 from utils.tenancy import scoped_query
 from utils.write_ops import apply_training_mode, audit_and_event, model_snapshot

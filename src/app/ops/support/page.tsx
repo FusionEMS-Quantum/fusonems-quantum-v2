@@ -38,15 +38,15 @@ export default function SupportPage() {
 
   useEffect(() => {
     let mounted = true
-    apiFetch("/api/founder/overview")
+    apiFetch<{ orgs: Array<{ id: number }> }>("/api/founder/overview")
       .then((data) => {
-        if (!mounted) return
+        if (!mounted) return Promise.resolve([] as Array<{ id: number; email: string; full_name: string }>)
         if (data.orgs.length) {
           const id = data.orgs[0].id
           setOrgId(id)
-          return apiFetch(`/api/founder/orgs/${id}/users`)
+          return apiFetch<Array<{ id: number; email: string; full_name: string }>>(`/api/founder/orgs/${id}/users`)
         }
-        return Promise.resolve([])
+        return Promise.resolve([] as Array<{ id: number; email: string; full_name: string }>)
       })
       .then((orgUsers) => {
         if (!mounted) return
@@ -87,7 +87,7 @@ export default function SupportPage() {
         purpose: form.purpose,
         expires_minutes: form.expiresMinutes,
       }
-      const response = await apiFetch("/api/support/sessions", {
+      const response = await apiFetch<any>("/api/support/sessions", {
         method: "POST",
         body: JSON.stringify(payload),
       })
@@ -102,7 +102,7 @@ export default function SupportPage() {
   const loadEvents = async () => {
     if (!session) return
     try {
-      const data = await apiFetch(`/api/support/sessions/${session.session_id}/events`, {
+      const data = await apiFetch<{ events: any[] }>(`/api/support/sessions/${session.session_id}/events`, {
         method: "GET",
       })
       setEvents(data.events)
@@ -115,7 +115,7 @@ export default function SupportPage() {
     if (!session) return
     try {
       const payload = JSON.parse(form.eventPayload)
-      await apiFetch(`/api/support/sessions/${session.session_id}/events`, {
+      await apiFetch<void>(`/api/support/sessions/${session.session_id}/events`, {
         method: "POST",
         headers: {
           "x-support-session-token": session.session_token,
@@ -141,7 +141,7 @@ export default function SupportPage() {
   const endSession = async () => {
     if (!session) return
     try {
-      await apiFetch(`/api/support/sessions/${session.session_id}/end`, { method: "POST" })
+      await apiFetch<void>(`/api/support/sessions/${session.session_id}/end`, { method: "POST" })
       setStatus("Session ended")
     } catch {
       setStatus("Unable to end session")

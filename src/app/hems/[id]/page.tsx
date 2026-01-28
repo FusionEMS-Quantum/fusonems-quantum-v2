@@ -1,14 +1,15 @@
-// HEMS Detail View (read-only)
+"use client";
+
 import { useEffect, useState } from "react";
-import { useRouter } from "next/router";
-import { apiFetch } from "../../lib/api";
+import { useParams } from "next/navigation";
+import { apiFetch } from "@/lib/api";
 
 type Mission = Record<string, any>;
 type TimelineEntry = Record<string, any>;
 
 export default function HEMSDetail() {
-  const router = useRouter();
-  const { id } = router.query;
+  const params = useParams();
+  const id = params?.id;
   const [mission, setMission] = useState<Mission | null>(null);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [loading, setLoading] = useState(true);

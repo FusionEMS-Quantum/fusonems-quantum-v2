@@ -18,6 +18,7 @@ from models.organization import Organization
 from models.user import User, UserRole
 from services.email.email_transport_service import send_outbound
 from services.mail.mail_router import MessageCreate, _send_telnyx_message
+from services.storage.health_service import StorageHealthService
 from utils.tenancy import get_scoped_record, scoped_query
 from utils.write_ops import apply_training_mode, audit_and_event, model_snapshot
 
@@ -400,3 +401,132 @@ def notify_call_script(
         event_payload={"recipient": payload.recipient_name, "incident_id": payload.incident_id},
     )
     return {"script": script, "timestamp": now_label}
+
+
+@router.get("/storage/health")
+def storage_health(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin)),
+):
+    health = StorageHealthService.get_storage_health(db, org_id=str(user.org_id))
+    
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="read",
+        resource="founder_storage_health",
+        classification="OPS",
+        after_state={"status": health["status"]},
+        event_type="founder.storage.health.viewed",
+        event_payload={"status": health["status"]},
+    )
+    
+    return health
+
+
+@router.get("/storage/activity")
+def storage_activity(
+    request: Request,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin)),
+):
+    activity = StorageHealthService.get_recent_storage_activity(
+        db, 
+        org_id=str(user.org_id),
+        limit=limit
+    )
+    
+    return {
+        "activity": activity,
+        "count": len(activity)
+    }
+
+
+@router.get("/storage/breakdown")
+def storage_breakdown(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin)),
+):
+    breakdown = StorageHealthService.get_storage_breakdown(db, org_id=str(user.org_id))
+    
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="read",
+        resource="founder_storage_breakdown",
+        classification="OPS",
+        after_state=breakdown,
+        event_type="founder.storage.breakdown.viewed",
+        event_payload={"systems": breakdown["total_systems"]},
+    )
+    
+    return breakdown
+
+
+@router.get("/storage/failures")
+def storage_failures(
+    request: Request,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin)),
+):
+    failures = StorageHealthService.get_failed_operations(
+        db,
+        org_id=str(user.org_id),
+        limit=limit
+    )
+    
+    return {
+        "failures": failures,
+        "count": len(failures)
+    }
+
+
+@router.get("/system/health")
+def unified_system_health(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin)),
+):
+    from services.founder.system_health_service import SystemHealthService
+    
+    health = SystemHealthService.get_unified_system_health(db, user.org_id)
+    
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="read",
+        resource="founder_system_health",
+        classification="OPS",
+        after_state={"overall_status": health["overall_status"]},
+        event_type="founder.system.health.viewed",
+        event_payload={
+            "status": health["overall_status"],
+            "critical_issues": len(health["critical_issues"]),
+            "warnings": len(health["warnings"])
+        },
+    )
+    
+    return health
+
+
+@router.get("/builders/health")
+def builders_health(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin)),
+):
+    from services.founder.system_health_service import SystemHealthService
+    
+    builders = SystemHealthService.get_builder_systems_health(db, user.org_id)
+    
+    return {
+        "builders": builders,
+        "timestamp": datetime.utcnow().isoformat()
+    }

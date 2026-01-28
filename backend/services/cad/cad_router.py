@@ -327,3 +327,177 @@ def update_unit_status(
     )
     db.commit()
     return {"status": "ok"}
+
+
+class DispatchMessagePayload(BaseModel):
+    unit_id: str
+    message_id: str
+    message_text: str
+    priority: Literal["normal", "urgent", "critical"]
+    notes: str | None = None
+
+
+@router.post("/dispatch-message")
+def send_dispatch_message(
+    payload: DispatchMessagePayload,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher, UserRole.provider, UserRole.crew)),
+):
+    """
+    MDT → CAD canned message (operational only)
+    """
+    unit = scoped_query(db, Unit, user.org_id, request.state.training_mode).filter(
+        Unit.unit_identifier == payload.unit_id
+    ).first()
+    
+    if not unit:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unit not found")
+    
+    # Create audit event for dispatch visibility
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="create",
+        resource="dispatch_message",
+        classification="OPS",
+        event_type="cad.dispatch_message.sent",
+        event_payload={
+            "unit_id": payload.unit_id,
+            "message_id": payload.message_id,
+            "message_text": payload.message_text,
+            "priority": payload.priority,
+            "notes": payload.notes,
+            "user_id": user.id,
+        },
+    )
+    
+    logger.info(f"Dispatch message from {payload.unit_id}: {payload.message_text}")
+    return {"status": "sent", "timestamp": datetime.utcnow().isoformat()}
+
+
+class MileageStartPayload(BaseModel):
+    odometer: float
+    photo: str | None = None
+
+
+class MileageEndPayload(BaseModel):
+    odometer: float
+    photo: str | None = None
+
+
+@router.get("/mileage")
+def get_mileage_entries(
+    unit_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher, UserRole.provider, UserRole.crew)),
+):
+    """
+    Get mileage entries for a unit
+    """
+    unit = scoped_query(db, Unit, user.org_id, request.state.training_mode).filter(
+        Unit.unit_identifier == unit_id
+    ).first()
+    
+    if not unit:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unit not found")
+    
+    # Find active incident
+    active_incident = (
+        scoped_query(db, CADIncident, user.org_id, request.state.training_mode)
+        .filter(
+            CADIncident.assigned_unit_id == unit.id,
+            CADIncident.status.in_(["assigned", "enroute_to_pickup", "on_scene", "transporting"])
+        )
+        .order_by(CADIncident.created_at.desc())
+        .first()
+    )
+    
+    # Mock data for now - in production, store in separate mileage table
+    active_entry = None
+    if active_incident:
+        active_entry = {
+            "id": f"mile_{active_incident.id}",
+            "incident_id": str(active_incident.id),
+            "incident_number": f"T{active_incident.id:06d}",
+            "unit_id": unit_id,
+            "start_odometer": None,  # Would come from DB
+            "end_odometer": None,
+            "gps_distance_km": active_incident.distance_meters / 1000 if active_incident.distance_meters else 0,
+            "route_distance_km": active_incident.distance_meters / 1000 if active_incident.distance_meters else 0,
+            "start_time": active_incident.created_at.isoformat(),
+            "pickup_facility": active_incident.requesting_facility or "Unknown",
+            "destination_facility": active_incident.receiving_facility or "Unknown",
+            "status": "in_progress",
+        }
+    
+    return {
+        "active_entry": active_entry,
+        "entries": [],  # Recent completed entries would come from mileage table
+    }
+
+
+@router.post("/mileage/{mileage_id}/start")
+def record_start_mileage(
+    mileage_id: str,
+    payload: MileageStartPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher, UserRole.provider, UserRole.crew)),
+):
+    """
+    Record start odometer reading
+    """
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="create",
+        resource="mileage_entry",
+        classification="OPS",
+        event_type="cad.mileage.start",
+        event_payload={
+            "mileage_id": mileage_id,
+            "odometer": payload.odometer,
+            "has_photo": payload.photo is not None,
+            "user_id": user.id,
+        },
+    )
+    
+    logger.info(f"Start mileage recorded: {mileage_id} = {payload.odometer}")
+    return {"status": "recorded", "timestamp": datetime.utcnow().isoformat()}
+
+
+@router.post("/mileage/{mileage_id}/end")
+def record_end_mileage(
+    mileage_id: str,
+    payload: MileageEndPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher, UserRole.provider, UserRole.crew)),
+):
+    """
+    Record end odometer reading
+    """
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="update",
+        resource="mileage_entry",
+        classification="OPS",
+        event_type="cad.mileage.end",
+        event_payload={
+            "mileage_id": mileage_id,
+            "odometer": payload.odometer,
+            "has_photo": payload.photo is not None,
+            "user_id": user.id,
+        },
+    )
+    
+    logger.info(f"End mileage recorded: {mileage_id} = {payload.odometer}")
+    return {"status": "recorded", "timestamp": datetime.utcnow().isoformat()}
+
+
