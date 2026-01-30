@@ -27,7 +27,7 @@ telnyx>=2.0.0
 
 # Payments & Billing
 stripe>=7.0.0
-lob>=6.0.0
+lob>=4.5.0
 
 # File Storage & Processing
 boto3>=1.34.0
