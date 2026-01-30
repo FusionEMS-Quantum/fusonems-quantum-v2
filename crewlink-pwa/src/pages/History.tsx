@@ -1,10 +1,21 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { getTripHistory } from '../lib/api'
 import type { TripHistoryItem } from '../types'
+import PageHeader from '../components/PageHeader'
+import BottomNav from '../components/BottomNav'
+
+const PRIORITY_BG: Record<string, string> = {
+  STAT: 'bg-red-600',
+  EMERGENT: 'bg-orange-500',
+  URGENT: 'bg-amber-500',
+  ROUTINE: 'bg-emerald-600',
+}
+const STATUS_BG: Record<string, string> = {
+  COMPLETED: 'bg-emerald-900/50 text-emerald-400 border border-emerald-600/50',
+  CANCELLED: 'bg-red-900/50 text-red-400 border border-red-600/50',
+}
 
 export default function History() {
-  const navigate = useNavigate()
   const [trips, setTrips] = useState<TripHistoryItem[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -20,46 +31,41 @@ export default function History() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
-      <header className="bg-gray-800 px-4 py-3 flex items-center justify-between">
-        <button onClick={() => navigate('/')} className="text-2xl">←</button>
-        <h1 className="font-semibold">Trip History</h1>
-        <div className="w-8" />
-      </header>
-
+    <div className="min-h-screen bg-dark text-white flex flex-col">
+      <PageHeader variant="subpage" showBack title="Trip History" />
       <main className="flex-1 p-4 overflow-y-auto">
         {loading ? (
-          <div className="text-center text-gray-400">Loading...</div>
+          <div className="flex flex-col items-center justify-center py-12">
+            <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <p className="mt-3 text-muted text-sm">Loading...</p>
+          </div>
         ) : trips.length === 0 ? (
-          <div className="text-center text-gray-400">No trip history</div>
+          <div className="text-center py-12">
+            <div className="w-16 h-16 mx-auto mb-3 bg-surface-elevated rounded-2xl flex items-center justify-center border border-border/50">
+              <svg className="w-8 h-8 text-muted" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <p className="text-muted font-medium">No trip history</p>
+          </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-3 animate-fade-in">
             {trips.map((trip) => (
-              <div
-                key={trip.id}
-                className="bg-gray-800 rounded-xl p-4"
-              >
+              <div key={trip.id} className="crewlink-card p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-mono text-sm text-gray-400">#{trip.trip_number}</span>
-                  <span className={`px-2 py-1 rounded text-xs font-bold ${
-                    trip.priority === 'STAT' ? 'bg-red-600' :
-                    trip.priority === 'EMERGENT' ? 'bg-orange-500' :
-                    trip.priority === 'URGENT' ? 'bg-yellow-500' : 'bg-green-600'
-                  }`}>
+                  <span className="font-mono text-sm text-muted">#{trip.trip_number}</span>
+                  <span className={`px-2.5 py-1 rounded-button text-xs font-bold ${PRIORITY_BG[trip.priority] || 'bg-emerald-600'}`}>
                     {trip.service_level}
                   </span>
                 </div>
                 <div className="text-sm">
-                  <div className="text-gray-300">{trip.pickup_facility}</div>
-                  <div className="text-gray-500 text-center">↓</div>
-                  <div className="text-gray-300">{trip.destination_facility}</div>
+                  <div className="text-muted-light">{trip.pickup_facility}</div>
+                  <div className="text-muted text-center py-0.5">↓</div>
+                  <div className="text-muted-light">{trip.destination_facility}</div>
                 </div>
-                <div className="mt-2 flex items-center justify-between text-xs text-gray-400">
+                <div className="mt-2 flex items-center justify-between text-xs text-muted">
                   <span>{formatDate(trip.acknowledged_at)}</span>
-                  <span className={`px-2 py-1 rounded ${
-                    trip.status === 'COMPLETED' ? 'bg-green-900 text-green-400' :
-                    trip.status === 'CANCELLED' ? 'bg-red-900 text-red-400' : 'bg-blue-900 text-blue-400'
-                  }`}>
+                  <span className={`px-2 py-1 rounded-button ${STATUS_BG[trip.status] || 'bg-primary/20 text-primary border border-primary/50'}`}>
                     {trip.status.replace(/_/g, ' ')}
                   </span>
                 </div>
@@ -68,25 +74,7 @@ export default function History() {
           </div>
         )}
       </main>
-
-      <nav className="bg-gray-800 px-4 py-3 flex justify-around">
-        <button onClick={() => navigate('/')} className="flex flex-col items-center text-gray-400">
-          <span className="text-xl">🏠</span>
-          <span className="text-xs">Home</span>
-        </button>
-        <button onClick={() => navigate('/ptt')} className="flex flex-col items-center text-gray-400">
-          <span className="text-xl">🎙️</span>
-          <span className="text-xs">PTT</span>
-        </button>
-        <button className="flex flex-col items-center text-blue-400">
-          <span className="text-xl">📋</span>
-          <span className="text-xs">History</span>
-        </button>
-        <button onClick={() => navigate('/settings')} className="flex flex-col items-center text-gray-400">
-          <span className="text-xl">⚙️</span>
-          <span className="text-xs">Settings</span>
-        </button>
-      </nav>
+      <BottomNav />
     </div>
   )
 }

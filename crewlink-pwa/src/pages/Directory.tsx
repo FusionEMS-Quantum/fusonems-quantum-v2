@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import type { HospitalDirectory } from '../types'
+import PageHeader from '../components/PageHeader'
+import BottomNav from '../components/BottomNav'
 
 type FacilityType = 'ALL' | 'HOSPITAL' | 'NURSING_FACILITY' | 'DIALYSIS' | 'HELIPAD'
 
 export default function Directory() {
-  const navigate = useNavigate()
   const [facilities, setFacilities] = useState<HospitalDirectory[]>([])
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<FacilityType>('ALL')
@@ -52,28 +52,23 @@ export default function Directory() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
-      <header className="bg-gray-800 px-4 py-3 flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="text-2xl">←</button>
-        <h1 className="text-lg font-semibold">Hospital Directory</h1>
-      </header>
-
-      <div className="p-4 space-y-3">
+    <div className="min-h-screen bg-dark text-white flex flex-col">
+      <PageHeader variant="subpage" showBack title="Hospital Directory" />
+      <div className="p-4 space-y-3 border-b border-border">
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search facilities..."
-          className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white"
+          className="crewlink-input"
         />
-        
         <div className="flex gap-2 overflow-x-auto pb-2">
           {(['ALL', 'HOSPITAL', 'NURSING_FACILITY', 'DIALYSIS', 'HELIPAD'] as FacilityType[]).map(type => (
             <button
               key={type}
               onClick={() => setFilter(type)}
-              className={`px-3 py-1 rounded-full text-sm whitespace-nowrap ${
-                filter === type ? 'bg-blue-600' : 'bg-gray-700'
+              className={`px-3 py-1.5 rounded-pill text-sm whitespace-nowrap font-medium transition-colors ${
+                filter === type ? 'bg-primary text-white' : 'bg-surface-elevated text-muted-light hover:bg-card-hover border border-border'
               }`}
             >
               {type === 'ALL' ? 'All' : type.replace('_', ' ')}
@@ -81,28 +76,32 @@ export default function Directory() {
           ))}
         </div>
       </div>
-
       <main className="flex-1 overflow-y-auto px-4 pb-4">
         {loading ? (
-          <div className="text-center text-gray-400 py-8">Loading...</div>
+          <div className="flex flex-col items-center justify-center py-12">
+            <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <p className="mt-3 text-muted text-sm">Loading...</p>
+          </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center text-gray-400 py-8">No facilities found</div>
+          <div className="text-center py-12">
+            <p className="text-muted font-medium">No facilities found</p>
+          </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2 animate-fade-in">
             {filtered.map((facility) => (
               <div
                 key={facility.id}
                 onClick={() => setSelectedFacility(facility)}
-                className="bg-gray-800 rounded-lg p-4 cursor-pointer hover:bg-gray-750"
+                className="crewlink-card p-4 cursor-pointer"
               >
                 <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="font-semibold">{facility.name}</div>
-                    <div className="text-sm text-gray-400">{facility.city}, {facility.state}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-white">{facility.name}</div>
+                    <div className="text-sm text-muted">{facility.city}, {facility.state}</div>
                     {renderBadges(facility).length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
                         {renderBadges(facility).map((badge, i) => (
-                          <span key={i} className="px-2 py-0.5 bg-red-600/30 text-red-300 text-xs rounded">
+                          <span key={i} className="px-2 py-0.5 bg-red-600/30 text-red-300 text-xs rounded-button border border-red-500/30">
                             {badge}
                           </span>
                         ))}
@@ -114,7 +113,7 @@ export default function Directory() {
                       e.stopPropagation()
                       handleCall(facility.main_phone)
                     }}
-                    className="bg-green-600 p-3 rounded-full"
+                    className="bg-emerald-600 hover:bg-emerald-500 p-3 rounded-full flex-shrink-0 transition-colors active:scale-95"
                   >
                     <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                       <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
@@ -128,27 +127,26 @@ export default function Directory() {
       </main>
 
       {selectedFacility && (
-        <div className="fixed inset-0 bg-black/80 flex items-end z-50" onClick={() => setSelectedFacility(null)}>
-          <div className="bg-gray-800 w-full rounded-t-2xl p-6 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-end z-50 animate-fade-in" onClick={() => setSelectedFacility(null)}>
+          <div className="bg-surface border-t border-border w-full rounded-t-2xl p-6 max-h-[80vh] overflow-y-auto shadow-card-hover animate-slide-up" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h2 className="text-xl font-bold">{selectedFacility.name}</h2>
-                <p className="text-gray-400">{selectedFacility.type.replace('_', ' ')}</p>
+                <h2 className="text-xl font-bold text-white">{selectedFacility.name}</h2>
+                <p className="text-muted text-sm">{selectedFacility.type.replace('_', ' ')}</p>
               </div>
-              <button onClick={() => setSelectedFacility(null)} className="text-2xl text-gray-400">×</button>
+              <button onClick={() => setSelectedFacility(null)} className="p-2 text-muted hover:text-white rounded-button hover:bg-surface-elevated transition-colors text-2xl">×</button>
             </div>
 
             <div className="space-y-4">
               <div>
-                <div className="text-xs text-gray-500 uppercase">Address</div>
-                <div>{selectedFacility.address}</div>
-                <div>{selectedFacility.city}, {selectedFacility.state} {selectedFacility.zip}</div>
+                <div className="text-xs text-muted uppercase tracking-wide">Address</div>
+                <div className="text-muted-light">{selectedFacility.address}</div>
+                <div className="text-muted-light">{selectedFacility.city}, {selectedFacility.state} {selectedFacility.zip}</div>
               </div>
-
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => handleCall(selectedFacility.main_phone)}
-                  className="bg-green-600 p-4 rounded-lg flex flex-col items-center"
+                  className="bg-emerald-600 hover:bg-emerald-500 p-4 rounded-card flex flex-col items-center transition-colors active:scale-[0.98]"
                 >
                   <svg className="w-6 h-6 mb-1" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
@@ -160,7 +158,7 @@ export default function Directory() {
                 {selectedFacility.er_phone && (
                   <button
                     onClick={() => handleCall(selectedFacility.er_phone!)}
-                    className="bg-red-600 p-4 rounded-lg flex flex-col items-center"
+                    className="bg-red-600 hover:bg-red-500 p-4 rounded-card flex flex-col items-center transition-colors active:scale-[0.98]"
                   >
                     <svg className="w-6 h-6 mb-1" fill="currentColor" viewBox="0 0 20 20">
                       <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
@@ -173,7 +171,7 @@ export default function Directory() {
                 {selectedFacility.dispatch_phone && (
                   <button
                     onClick={() => handleCall(selectedFacility.dispatch_phone!)}
-                    className="bg-blue-600 p-4 rounded-lg flex flex-col items-center"
+                    className="bg-primary hover:bg-primary-hover p-4 rounded-card flex flex-col items-center transition-colors active:scale-[0.98]"
                   >
                     <svg className="w-6 h-6 mb-1" fill="currentColor" viewBox="0 0 20 20">
                       <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
@@ -186,7 +184,7 @@ export default function Directory() {
                 {selectedFacility.helipad_phone && (
                   <button
                     onClick={() => handleCall(selectedFacility.helipad_phone!)}
-                    className="bg-orange-600 p-4 rounded-lg flex flex-col items-center"
+                    className="bg-orange-600 hover:bg-orange-500 p-4 rounded-card flex flex-col items-center transition-colors active:scale-[0.98]"
                   >
                     <svg className="w-6 h-6 mb-1" fill="currentColor" viewBox="0 0 20 20">
                       <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
@@ -198,32 +196,29 @@ export default function Directory() {
               </div>
 
               {selectedFacility.helipad_radio_freq && (
-                <div className="bg-gray-700 p-3 rounded-lg">
-                  <div className="text-xs text-gray-500 uppercase">Helipad Radio Frequency</div>
-                  <div className="font-mono text-lg">{selectedFacility.helipad_radio_freq}</div>
+                <div className="bg-surface-elevated border border-border p-3 rounded-card">
+                  <div className="text-xs text-muted uppercase tracking-wide">Helipad Radio Frequency</div>
+                  <div className="font-mono text-lg text-white mt-1">{selectedFacility.helipad_radio_freq}</div>
                 </div>
               )}
-
               {renderBadges(selectedFacility).length > 0 && (
                 <div>
-                  <div className="text-xs text-gray-500 uppercase mb-2">Certifications</div>
+                  <div className="text-xs text-muted uppercase tracking-wide mb-2">Certifications</div>
                   <div className="flex flex-wrap gap-2">
                     {renderBadges(selectedFacility).map((badge, i) => (
-                      <span key={i} className="px-3 py-1 bg-red-600/30 text-red-300 rounded-full">
+                      <span key={i} className="px-3 py-1 bg-red-600/30 text-red-300 rounded-pill text-sm border border-red-500/30">
                         {badge}
                       </span>
                     ))}
                   </div>
                 </div>
               )}
-
               {selectedFacility.notes && (
                 <div>
-                  <div className="text-xs text-gray-500 uppercase">Notes</div>
-                  <div className="text-gray-300">{selectedFacility.notes}</div>
+                  <div className="text-xs text-muted uppercase tracking-wide">Notes</div>
+                  <div className="text-muted-light text-sm mt-1">{selectedFacility.notes}</div>
                 </div>
               )}
-
               {selectedFacility.latitude && selectedFacility.longitude && (
                 <button
                   onClick={() => {
@@ -232,7 +227,7 @@ export default function Directory() {
                       '_blank'
                     )
                   }}
-                  className="w-full bg-gray-700 p-4 rounded-lg flex items-center justify-center gap-2"
+                  className="w-full crewlink-btn-secondary p-4 flex items-center justify-center gap-2"
                 >
                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
@@ -244,6 +239,7 @@ export default function Directory() {
           </div>
         </div>
       )}
+      <BottomNav />
     </div>
   )
 }

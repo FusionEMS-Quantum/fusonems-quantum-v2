@@ -75,7 +75,6 @@ class PersonnelResponse(PersonnelBase):
 
     class Config:
         from_attributes = True
-        orm_mode = True
 
 
 class EmploymentStatusUpdate(BaseModel):
@@ -97,7 +96,6 @@ class CertificationResponse(BaseModel):
 
     class Config:
         from_attributes = True
-        orm_mode = True
 
 
 class TimeClockIn(BaseModel):
@@ -125,7 +123,6 @@ class TimeEntryResponse(BaseModel):
 
     class Config:
         from_attributes = True
-        orm_mode = True
 
 
 class LeaveRequestCreate(BaseModel):
@@ -153,7 +150,6 @@ class LeaveRequestResponse(BaseModel):
 
     class Config:
         from_attributes = True
-        orm_mode = True
 
 
 class LeaveApproval(BaseModel):
@@ -174,7 +170,6 @@ class LeaveBalanceResponse(BaseModel):
 
     class Config:
         from_attributes = True
-        orm_mode = True
 
 
 class PayrollPeriodCreate(BaseModel):
@@ -197,7 +192,6 @@ class PayrollPeriodResponse(BaseModel):
 
     class Config:
         from_attributes = True
-        orm_mode = True
 
 
 class PayrollProcess(BaseModel):
@@ -221,7 +215,6 @@ class PaycheckResponse(BaseModel):
 
     class Config:
         from_attributes = True
-        orm_mode = True
 
 
 # ============================================================================

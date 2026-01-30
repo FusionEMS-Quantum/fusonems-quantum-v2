@@ -143,9 +143,10 @@ def _critical_audits(db: Session, org_id: int, limit: int = 50) -> list[dict]:
 def founder_overview(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin)),
+    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin, UserRole.admin)),
 ):
-    orgs = scoped_query(db, Organization, user.org_id, None).all()
+    # Organization doesn't have org_id - query by id directly
+    orgs = db.query(Organization).filter(Organization.id == user.org_id).all()
     modules, active_degradation = _module_health(db, user.org_id)
     queue = _queue_summary(db, user.org_id)
     audits = _critical_audits(db, user.org_id)
@@ -178,7 +179,7 @@ def org_health(
     org_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin)),
+    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin, UserRole.admin)),
 ):
     org = get_scoped_record(
         db,
@@ -232,7 +233,7 @@ def org_users(
     org_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin)),
+    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin, UserRole.admin)),
 ):
     org = get_scoped_record(
         db,
@@ -306,7 +307,7 @@ def notify_sms(
     payload: NotificationSMS,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin)),
+    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin, UserRole.admin)),
 ):
     _ensure_telnyx_ready()
     message_payload = MessageCreate(channel="sms", recipient=payload.recipient, body=payload.message)
@@ -334,7 +335,7 @@ def notify_email(
     payload: NotificationEmail,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin)),
+    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin, UserRole.admin)),
 ):
     # Email transport uses SMTP/IMAP (Mailu) as primary method
     # Postmark is optional - check SMTP configuration instead
@@ -374,7 +375,7 @@ def notify_call_script(
     payload: CallScriptPayload,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin)),
+    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin, UserRole.admin)),
 ):
     org = (
         db.query(Organization)
@@ -408,7 +409,7 @@ def notify_call_script(
 def storage_health(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin)),
+    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin, UserRole.admin)),
 ):
     health = StorageHealthService.get_storage_health(db, org_id=str(user.org_id))
     
@@ -432,7 +433,7 @@ def storage_activity(
     request: Request,
     limit: int = 20,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin)),
+    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin, UserRole.admin)),
 ):
     activity = StorageHealthService.get_recent_storage_activity(
         db, 
@@ -450,7 +451,7 @@ def storage_activity(
 def storage_breakdown(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin)),
+    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin, UserRole.admin)),
 ):
     breakdown = StorageHealthService.get_storage_breakdown(db, org_id=str(user.org_id))
     
@@ -474,7 +475,7 @@ def storage_failures(
     request: Request,
     limit: int = 50,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin)),
+    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin, UserRole.admin)),
 ):
     failures = StorageHealthService.get_failed_operations(
         db,
@@ -492,7 +493,7 @@ def storage_failures(
 def unified_system_health(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin)),
+    user: User = Depends(require_roles(UserRole.founder, UserRole.ops_admin, UserRole.admin)),
 ):
     from services.founder.system_health_service import SystemHealthService
     

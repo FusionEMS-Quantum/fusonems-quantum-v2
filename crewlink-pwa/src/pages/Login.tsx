@@ -91,107 +91,96 @@ export default function Login() {
     const cctRoles = availableRoles.filter(r => r.code.startsWith('CCT'))
     
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900 p-4">
-        <div className="w-full max-w-md">
-          <div className="bg-gray-800 rounded-lg shadow-xl p-6">
+      <div className="min-h-screen flex items-center justify-center bg-dark p-4 bg-gradient-to-b from-dark via-surface to-dark">
+        <div className="w-full max-w-md animate-slide-up">
+          <div className="crewlink-card p-6 shadow-card-hover">
             <div className="text-center mb-6">
               <h1 className="text-2xl font-bold text-white mb-1">Select Your Role</h1>
-              <p className="text-gray-400 text-sm">What role are you working today?</p>
+              <p className="text-muted text-sm">What role are you working today?</p>
             </div>
-
             <form onSubmit={handleRoleSubmit} className="space-y-4">
               {groundRoles.length > 0 && (
                 <div>
-                  <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Ground Transport</div>
+                  <div className="text-xs text-muted uppercase tracking-wide mb-2">Ground Transport</div>
                   <div className="grid grid-cols-2 gap-2">
                     {groundRoles.map((role) => (
                       <button
                         key={role.code}
                         type="button"
                         onClick={() => setSelectedRole(role.code)}
-                        className={`p-3 rounded-lg text-left border-2 transition-all ${
+                        className={`p-3 rounded-card text-left border-2 transition-all ${
                           selectedRole === role.code
-                            ? 'border-blue-500 bg-blue-500/20 text-white'
-                            : 'border-gray-600 bg-gray-700 text-gray-300 hover:border-gray-500'
+                            ? 'border-primary bg-primary/20 text-white'
+                            : 'border-border bg-surface-elevated text-muted-light hover:border-muted'
                         }`}
                       >
                         <div className="font-medium text-sm">{role.label}</div>
-                        <div className="text-xs text-gray-400">{role.nemsisResponseRole.replace('_', ' ')}</div>
+                        <div className="text-xs text-muted">{role.nemsisResponseRole.replace('_', ' ')}</div>
                       </button>
                     ))}
                   </div>
                 </div>
               )}
-
               {cctRoles.length > 0 && (
                 <div>
-                  <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Critical Care</div>
+                  <div className="text-xs text-muted uppercase tracking-wide mb-2">Critical Care</div>
                   <div className="grid grid-cols-2 gap-2">
                     {cctRoles.map((role) => (
                       <button
                         key={role.code}
                         type="button"
                         onClick={() => setSelectedRole(role.code)}
-                        className={`p-3 rounded-lg text-left border-2 transition-all ${
+                        className={`p-3 rounded-card text-left border-2 transition-all ${
                           selectedRole === role.code
-                            ? 'border-purple-500 bg-purple-500/20 text-white'
-                            : 'border-gray-600 bg-gray-700 text-gray-300 hover:border-gray-500'
+                            ? 'border-violet-500 bg-violet-500/20 text-white'
+                            : 'border-border bg-surface-elevated text-muted-light hover:border-muted'
                         }`}
                       >
                         <div className="font-medium text-sm">{role.label}</div>
-                        <div className="text-xs text-gray-400">{role.nemsisResponseRole.replace('_', ' ')}</div>
+                        <div className="text-xs text-muted">{role.nemsisResponseRole.replace('_', ' ')}</div>
                       </button>
                     ))}
                   </div>
                 </div>
               )}
-
               {hemsRoles.length > 0 && (
                 <div>
-                  <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">HEMS / Air Medical</div>
+                  <div className="text-xs text-muted uppercase tracking-wide mb-2">HEMS / Air Medical</div>
                   <div className="grid grid-cols-1 gap-2">
                     {hemsRoles.map((role) => (
                       <button
                         key={role.code}
                         type="button"
                         onClick={() => setSelectedRole(role.code)}
-                        className={`p-3 rounded-lg text-left border-2 transition-all ${
+                        className={`p-3 rounded-card text-left border-2 transition-all ${
                           selectedRole === role.code
-                            ? 'border-orange-500 bg-orange-500/20 text-white'
-                            : 'border-gray-600 bg-gray-700 text-gray-300 hover:border-gray-500'
+                            ? 'border-primary bg-primary/20 text-white'
+                            : 'border-border bg-surface-elevated text-muted-light hover:border-muted'
                         }`}
                       >
                         <div className="font-medium">{role.label}</div>
-                        <div className="text-xs text-gray-400">
-                          {role.canSeePilotInfo ? 'Flight deck access' : 'Medical crew'}
-                        </div>
+                        <div className="text-xs text-muted">{role.canSeePilotInfo ? 'Flight deck access' : 'Medical crew'}</div>
                       </button>
                     ))}
                   </div>
                 </div>
               )}
-
               {error && (
-                <div className="bg-red-900/50 border border-red-700 text-red-200 px-4 py-3 rounded-lg text-sm">
+                <div className="bg-red-900/50 border border-red-600 text-red-200 px-4 py-3 rounded-button text-sm">
                   {error}
                 </div>
               )}
-
               <button
                 type="submit"
                 disabled={loading || !selectedRole}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full crewlink-btn-primary py-3 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Starting Shift...' : 'Start Shift'}
               </button>
-              
               <button
                 type="button"
-                onClick={() => {
-                  setStep('credentials')
-                  localStorage.removeItem('auth_token')
-                }}
-                className="w-full text-gray-400 hover:text-white text-sm py-2"
+                onClick={() => { setStep('credentials'); localStorage.removeItem('auth_token') }}
+                className="w-full text-muted hover:text-white text-sm py-2 transition-colors"
               >
                 Back to Login
               </button>
@@ -203,63 +192,57 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-900 p-4">
-      <div className="w-full max-w-md">
-        <div className="bg-gray-800 rounded-lg shadow-xl p-8">
+    <div className="min-h-screen flex items-center justify-center bg-dark p-4 bg-gradient-to-b from-dark via-surface to-dark">
+      <div className="w-full max-w-md animate-slide-up">
+        <div className="crewlink-card p-8 shadow-card-hover">
           <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-blue-500 mb-2">CrewLink</h1>
-            <p className="text-gray-400">Medical Transport & HEMS</p>
+            <div className="w-14 h-14 mx-auto mb-4 bg-primary rounded-card flex items-center justify-center font-bold text-white text-xl shadow-lg">
+              CL
+            </div>
+            <h1 className="text-3xl font-bold text-primary mb-2">CrewLink</h1>
+            <p className="text-muted">Medical Transport & HEMS</p>
           </div>
-
           <form onSubmit={handleCredentialSubmit} className="space-y-6">
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-300 mb-2">
-                Username
-              </label>
+              <label htmlFor="username" className="block text-sm font-medium text-muted-light mb-2">Username</label>
               <input
                 id="username"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="crewlink-input"
                 placeholder="Enter your username"
                 required
                 autoComplete="username"
               />
             </div>
-
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
-                Password
-              </label>
+              <label htmlFor="password" className="block text-sm font-medium text-muted-light mb-2">Password</label>
               <input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="crewlink-input"
                 placeholder="Enter your password"
                 required
                 autoComplete="current-password"
               />
             </div>
-
             {error && (
-              <div className="bg-red-900/50 border border-red-700 text-red-200 px-4 py-3 rounded-lg">
+              <div className="bg-red-900/50 border border-red-600 text-red-200 px-4 py-3 rounded-button text-sm">
                 {error}
               </div>
             )}
-
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full crewlink-btn-primary py-3 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Logging in...' : 'Login'}
             </button>
           </form>
-          
-          <div className="mt-6 text-center text-xs text-gray-500">
+          <div className="mt-6 text-center text-xs text-muted">
             NEMSIS v3.5 Compliant
           </div>
         </div>

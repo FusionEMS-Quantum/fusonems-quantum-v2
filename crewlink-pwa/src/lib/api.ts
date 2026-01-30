@@ -173,6 +173,21 @@ export const submitDocument = async (
   })
 }
 
+/** Crew paging: alerts sent from dispatch to crew */
+export interface CrewPage {
+  id: number
+  title: string
+  message: string
+  priority: 'ROUTINE' | 'URGENT' | 'EMERGENT' | 'STAT'
+  sent_by: string
+  created_at: string
+}
+
+export const getPages = async (): Promise<CrewPage[]> => {
+  const response = await api.get('/crewlink/pages')
+  return response.data
+}
+
 export const getWeather = async (airportCode: string): Promise<any> => {
   const response = await api.get(`/crewlink/weather?airport_code=${airportCode}`)
   return response.data

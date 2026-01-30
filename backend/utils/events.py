@@ -17,6 +17,21 @@ class EventBus:
     def register(self, event_type: str, handler: EventHandler) -> None:
         self.handlers.setdefault(event_type, []).append(handler)
 
+    def on(self, event_type: str):
+        """
+        Decorator-style registration used by some modules.
+
+        Example:
+            @event_bus.on("billing.claim.denied")
+            def handler(event: EventLog): ...
+        """
+
+        def decorator(handler: EventHandler) -> EventHandler:
+            self.register(event_type, handler)
+            return handler
+
+        return decorator
+
     def publish(
         self,
         db: Session,

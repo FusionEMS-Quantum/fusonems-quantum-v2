@@ -1,4 +1,5 @@
 import os
+import asyncio
 from urllib.parse import urlparse
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -57,6 +58,7 @@ from services.epcr.ems_router import router as epcr_ems_router
 from services.epcr.fire_epcr_router import router as epcr_fire_router
 from services.epcr.hems_router import router as epcr_hems_router
 from services.epcr.dashboard_router import router as epcr_dashboard_router
+from services.dashboards.dashboards_router import router as dashboards_router
 from services.founder.founder_router import router as founder_router
 from services.founder.email_endpoints import router as founder_email_router
 from services.founder.billing_endpoints import router as founder_billing_router
@@ -157,6 +159,18 @@ from services.screen_share import router as screen_share_router
 app = FastAPI(title="FusonEMS Quantum Platform", version="2.0")
 app.include_router(ai_chat_router)
 app.include_router(screen_share_router)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Unexpected server error. Please retry.",
+            "path": str(request.url.path),
+        },
+    )
 
 
 def _should_bootstrap_schema() -> bool:
@@ -268,6 +282,7 @@ app.include_router(epcr_ems_router)
 app.include_router(epcr_fire_router)
 app.include_router(epcr_hems_router)
 app.include_router(epcr_dashboard_router)
+app.include_router(dashboards_router)
 app.include_router(schedule_router)
 app.include_router(scheduling_module_router)
 app.include_router(predictive_scheduling_router)

@@ -2,9 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  background-color: #1a1a1a;
-  color: #ffffff;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+@layer base {
+  body {
+    margin: 0;
+    background-color: #0f0f12;
+    color: #fafafa;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer components {
+  .crewlink-card {
+    @apply bg-card rounded-card shadow-card border border-border/50 transition-shadow duration-200;
+  }
+  .crewlink-card:hover {
+    @apply shadow-card-hover;
+  }
+  .crewlink-btn-primary {
+    @apply bg-primary hover:bg-primary-hover text-white font-semibold rounded-button transition-colors duration-200 active:scale-[0.98];
+  }
+  .crewlink-btn-secondary {
+    @apply bg-surface-elevated hover:bg-card-hover text-white font-medium rounded-button border border-border transition-colors duration-200 active:scale-[0.98];
+  }
+  .crewlink-input {
+    @apply w-full px-4 py-3 bg-surface border border-border rounded-button text-white placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors;
+  }
+  .safe-area-pb {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getUnits, getIncidents } from '../lib/api'
 import { initSocket } from '../lib/socket'
 import Map from '../components/Map'
@@ -8,21 +8,22 @@ import type { Unit, Incident } from '../types'
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [units, setUnits] = useState<Unit[]>([])
   const [incidents, setIncidents] = useState<Incident[]>([])
-  const [socketConnected, setSocketConnected] = useState(true)
+  const [socketConnected, setSocketConnected] = useState(false)
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
 
   const { data: unitsData } = useQuery({
     queryKey: ['units'],
     queryFn: getUnits,
-    refetchInterval: 10000,
+    refetchInterval: socketConnected ? 30000 : 5000,
   })
 
   const { data: incidentsData } = useQuery({
     queryKey: ['incidents'],
     queryFn: getIncidents,
-    refetchInterval: 15000,
+    refetchInterval: socketConnected ? 30000 : 8000,
   })
 
   useEffect(() => {
@@ -91,12 +92,14 @@ export default function Dashboard() {
           : unit
       ))
       setLastUpdate(new Date())
+      queryClient.invalidateQueries({ queryKey: ['units'] })
     })
 
     // New incident created
     socket.on('incident:new', (data: Incident) => {
       setIncidents(prev => [...prev, data])
       setLastUpdate(new Date())
+      queryClient.invalidateQueries({ queryKey: ['incidents'] })
     })
 
     // Incident status updated
@@ -110,6 +113,7 @@ export default function Dashboard() {
           : inc
       ).filter(inc => inc.status !== 'completed'))
       setLastUpdate(new Date())
+      queryClient.invalidateQueries({ queryKey: ['incidents'] })
     })
 
     // Incident timestamp updated (geofence events, etc)
@@ -136,7 +140,7 @@ export default function Dashboard() {
       socket.off('incident:status:updated')
       socket.off('incident:timestamp:updated')
     }
-  }, [])
+  }, [queryClient])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -161,7 +165,7 @@ export default function Dashboard() {
     <div className="h-screen bg-dark flex">
       <div className="w-1/3 bg-dark-lighter p-6 overflow-y-auto">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-primary mb-2">FusoNEMS CAD</h1>
+          <h1 className="text-3xl font-bold text-primary mb-2">FusionEMS CAD</h1>
           <p className="text-gray-400">Computer-Aided Dispatch</p>
           <div className="flex items-center gap-2 mt-2">
             <div className={`w-2 h-2 rounded-full ${socketConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>

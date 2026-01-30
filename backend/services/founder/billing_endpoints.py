@@ -72,10 +72,6 @@ class ExplainResponse(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
-# Service instance
-billing_service = FounderBillingService()
-
-
 @router.get("/stats", response_model=BillingStatsResponse)
 async def get_founder_billing_stats(
     org_id: Optional[int] = None,
@@ -92,7 +88,7 @@ async def get_founder_billing_stats(
         - AI suggestions available
     """
     try:
-        stats_data = await billing_service.get_founder_billing_stats(org_id)
+        stats_data = await FounderBillingService.get_founder_billing_stats(db=db, org_id=org_id)
         return BillingStatsResponse(**stats_data)
     except Exception as e:
         logger.error(f"Error in get_founder_billing_stats endpoint: {e}")
@@ -122,7 +118,7 @@ async def get_recent_billing_activity(
         if limit > 50:
             limit = 50  # Cap at 50 items
             
-        activities = await billing_service.get_recent_billing_activity(limit, org_id)
+        activities = await FounderBillingService.get_recent_billing_activity(db=db, limit=limit, org_id=org_id)
         return [RecentBillingActivityResponse(**activity) for activity in activities]
     except Exception as e:
         logger.error(f"Error in get_recent_billing_activity endpoint: {e}")
@@ -145,7 +141,7 @@ async def get_billing_ai_insights(
         with confidence scores and suggested actions.
     """
     try:
-        insights = await billing_service.get_billing_ai_insights(org_id)
+        insights = await FounderBillingService.get_billing_ai_insights(db=db, org_id=org_id)
         return [AIInsightResponse(**insight) for insight in insights]
     except Exception as e:
         logger.error(f"Error in get_billing_ai_insights endpoint: {e}")
@@ -185,8 +181,8 @@ async def generate_billing_ai_chat_response(
                 detail="Question must be between 3 and 5000 characters"
             )
         
-        response_text = await billing_service.generate_billing_ai_chat_response(
-            request.question, org_id
+        response_text = await FounderBillingService.generate_billing_ai_chat_response(
+            db=db, question=request.question, org_id=org_id
         )
         
         return AIChatResponse(response=response_text)
@@ -202,13 +198,19 @@ async def generate_billing_ai_chat_response(
 
 
 @router.post("/explain", response_model=ExplainResponse)
-async def explain_billing_topic(request: ExplainRequest):
+async def explain_billing_topic(
+    request: ExplainRequest,
+    org_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
     """
     Get a plain-language explanation of a billing term, concept, or "what to do next".
     Designed for someone new to billing — AI explains everything and suggests next steps.
     """
     try:
-        explanation = await billing_service.explain_billing_topic(request.topic, request.context)
+        explanation = await FounderBillingService.explain_billing_topic(
+            db=db, topic=request.topic, context=request.context
+        )
         return ExplainResponse(explanation=explanation)
     except Exception as e:
         logger.error(f"Error in explain_billing_topic: {e}")

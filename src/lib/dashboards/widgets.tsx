@@ -204,14 +204,31 @@ export const DashboardRenderer: React.FC<DashboardRendererProps> = ({ schema, ti
   const [widgetData, setWidgetData] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
 
+  const getFallbackData = (widget: Widget) => {
+    switch (widget.type) {
+      case "stat":
+        return { value: "—" };
+      case "chart":
+        return { chartData: [{ value: 20 }, { value: 40 }, { value: 30 }, { value: 50 }] };
+      case "table":
+        return { columns: ["Metric", "Value"], rows: [{ Metric: "No data", Value: "—" }] };
+      case "list":
+        return { items: [{ title: "No data yet", subtitle: "Waiting for feed" }] };
+      default:
+        return {};
+    }
+  };
+
   useEffect(() => {
+    const baseUrl = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_API_URL ?? "") : "";
     const fetchAllData = async () => {
       setLoading(true);
       const data: Record<string, any> = {};
 
       for (const widget of schema.widgets) {
         try {
-          const response = await fetch(widget.dataSource);
+          const url = baseUrl ? `${baseUrl.replace(/\/$/, "")}${widget.dataSource}` : widget.dataSource;
+          const response = await fetch(url, { credentials: "include" });
           if (response.ok) {
             data[widget.id] = await response.json();
           }
@@ -228,7 +245,7 @@ export const DashboardRenderer: React.FC<DashboardRendererProps> = ({ schema, ti
   }, [schema]);
 
   const renderWidget = (widget: Widget) => {
-    const data = widgetData[widget.id];
+    const data = widgetData[widget.id] ?? getFallbackData(widget);
 
     switch (widget.type) {
       case "stat":

@@ -49,7 +49,7 @@ def system_health(
             "last_event_at": None,
             "recent_events": 0,
             "upgrade": {"status": "UNKNOWN", "blocking": []},
-            "smart_mode": settings.SMART_MODE,
+            "smart_mode": getattr(settings, "SMART_MODE", False),
         }
 
     modules = scoped_query(db, ModuleRegistry, user.org_id, None).order_by(
@@ -73,7 +73,7 @@ def system_health(
         "last_event_at": last_event.created_at.isoformat() if last_event else None,
         "recent_events": recent_events,
         "upgrade": upgrade_status,
-        "smart_mode": settings.SMART_MODE,
+        "smart_mode": getattr(settings, "SMART_MODE", False),
     }
 
 

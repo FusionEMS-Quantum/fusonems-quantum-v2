@@ -2,10 +2,10 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import bcrypt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from core.config import settings
@@ -18,16 +18,20 @@ from models.organization import Organization
 from models.user import User, UserRole
 from models.auth_session import AuthSession
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    """Hash password using bcrypt directly to avoid passlib issues."""
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verify password using bcrypt directly to avoid passlib issues."""
+    try:
+        return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+    except Exception:
+        return False
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> tuple[str, datetime]:
@@ -102,7 +106,7 @@ def get_current_user(
                 )
             
             # Check if session is expired
-            if session.expires_at < datetime.utcnow():
+            if session.expires_at < datetime.now(timezone.utc):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Session has expired",
@@ -110,7 +114,7 @@ def get_current_user(
                 )
             
             # Update last_seen_at
-            session.last_seen_at = datetime.utcnow()
+            session.last_seen_at = datetime.now(timezone.utc)
             db.commit()
             
     except JWTError as exc:

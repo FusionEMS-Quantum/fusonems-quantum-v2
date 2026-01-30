@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from math import asin, cos, radians, sin, sqrt
 from typing import List, Literal, Optional
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.guards import require_module
+from core.logger import logger
 from core.security import require_roles
 from models.cad import CADIncident, CADIncidentTimeline, Unit
 from models.transportlink import TransportTrip
@@ -479,6 +481,32 @@ def assign_unit(
     )
     db.commit()
     db.refresh(incident)
+
+    # Notify CrewLink / CAD socket so crew get real-time assignment (trip:request or assignment:received)
+    try:
+        from services.cad.socket_bridge import get_socket_bridge
+        bridge = get_socket_bridge()
+        if bridge and getattr(bridge, "connected", False):
+            incident_data = {
+                "incidentId": str(incident.id),
+                "type": incident.transport_type or "IFT",
+                "address": incident.requesting_facility or "",
+                "priority": incident.priority or "ROUTINE",
+                "details": (incident.notes or "")[:200],
+                "location": None,
+            }
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.create_task(bridge.send_assignment(unit.unit_identifier, incident_data))
+                else:
+                    loop.run_until_complete(bridge.send_assignment(unit.unit_identifier, incident_data))
+                logger.info("CrewLink/CAD: assignment sent to unit %s for incident %s", unit.unit_identifier, incident.id)
+            except RuntimeError:
+                asyncio.run(bridge.send_assignment(unit.unit_identifier, incident_data))
+    except Exception as e:
+        logger.warning("Socket bridge send_assignment skipped: %s", e)
+
     return incident
 
 

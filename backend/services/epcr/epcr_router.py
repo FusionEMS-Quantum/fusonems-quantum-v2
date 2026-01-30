@@ -1,11 +1,16 @@
 from datetime import datetime, timezone
+import io
+import json
 import logging
+import zipfile
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from core.database import get_db
 from core.guards import require_module
 from core.security import require_on_shift, require_roles, require_trusted_device
@@ -114,7 +119,7 @@ class RecordResponse(BaseModel):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class VitalEntry(BaseModel):
@@ -184,7 +189,7 @@ class ValidationStatusResponse(BaseModel):
     validation_timestamp: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 def _get_record(db: Session, user: User, record_id: int) -> EpcrRecord:
@@ -308,7 +313,7 @@ class QuickPCRResponse(BaseModel):
     incident_number: str
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 @router.post("/pcrs", response_model=QuickPCRResponse, status_code=status.HTTP_201_CREATED)
@@ -388,7 +393,7 @@ class PCRListItem(BaseModel):
     disposition: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 @router.get("/pcrs/recent", response_model=List[PCRListItem])
@@ -797,6 +802,64 @@ def export_record_nemsis_xml(
     nemsis_version = payload.get("nemsis_version") or "3.5.1"
     xml_str = NEMSISExporter.elements_to_xml(elements, state=state, nemsis_version=nemsis_version)
     return Response(content=xml_str, media_type="application/xml")
+
+
+class BulkExportNemsisRequest(BaseModel):
+    record_ids: List[int] = Field(..., description="Record IDs to export as NEMSIS XML")
+
+
+@router.post("/export/nemsis")
+def bulk_export_nemsis_xml(
+    payload: BulkExportNemsisRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.provider)),
+):
+    """Bulk export ePCR records as NEMSIS 3.x XML. Single record returns XML; multiple records return a ZIP of XML files."""
+    if not payload.record_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="record_ids is required and cannot be empty")
+    if len(payload.record_ids) == 1:
+        record = _get_record(db, user, payload.record_ids[0])
+        nemsis_payload = NEMSISExporter.export_record_to_nemsis(record, db=db)
+        elements = nemsis_payload.get("elements") or {}
+        state = nemsis_payload.get("state") or "WI"
+        nemsis_version = nemsis_payload.get("nemsis_version") or "3.5.1"
+        xml_str = NEMSISExporter.elements_to_xml(elements, state=state, nemsis_version=nemsis_version)
+        return Response(content=xml_str, media_type="application/xml")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for rid in payload.record_ids:
+            try:
+                record = _get_record(db, user, rid)
+            except HTTPException:
+                continue
+            nemsis_payload = NEMSISExporter.export_record_to_nemsis(record, db=db)
+            elements = nemsis_payload.get("elements") or {}
+            state = nemsis_payload.get("state") or "WI"
+            nemsis_version = nemsis_payload.get("nemsis_version") or "3.5.1"
+            xml_str = NEMSISExporter.elements_to_xml(elements, state=state, nemsis_version=nemsis_version)
+            zf.writestr(f"nemsis_record_{rid}.xml", xml_str)
+    buf.seek(0)
+    return Response(content=buf.getvalue(), media_type="application/zip")
+
+
+@router.get("/state-endpoints")
+def get_state_endpoints(
+    user: User = Depends(require_roles(UserRole.admin, UserRole.founder, UserRole.provider)),
+):
+    """Return configured NEMSIS state codes and whether each has a submission endpoint (for UI dropdowns and real-time display). Does not expose endpoint URLs."""
+    state_codes_raw = getattr(settings, "NEMSIS_STATE_CODES", None) or "WI"
+    state_codes = [s.strip().upper() for s in state_codes_raw.split(",") if s.strip()]
+    wi_endpoint = getattr(settings, "WISCONSIN_NEMSIS_ENDPOINT", None)
+    endpoints_json = getattr(settings, "NEMSIS_STATE_ENDPOINTS", None) or "{}"
+    try:
+        endpoints_map = json.loads(endpoints_json)
+    except (json.JSONDecodeError, TypeError):
+        endpoints_map = {}
+    result = []
+    for code in state_codes:
+        configured = (code == "WI" and bool(wi_endpoint)) or bool(endpoints_map.get(code) or endpoints_map.get(code.upper()))
+        result.append({"state_code": code, "configured": configured})
+    return {"state_endpoints": result, "realtime": True}
 
 
 class SubmitToStateRequest(BaseModel):

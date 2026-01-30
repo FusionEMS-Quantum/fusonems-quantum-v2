@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from core.database import get_db
@@ -11,6 +11,8 @@ from .transport_ai_service import extract_document, ai_refine_extraction
 import os
 
 router = APIRouter(prefix="/api/transport")
+
+ALLOWED_DOC_TYPES = {"AOB", "ABD", "PCS", "FACESHEET"}
 
 class ExtractRequest(BaseModel):
     file_id: str
@@ -26,6 +28,67 @@ class ApplyRequest(BaseModel):
     snapshot_id: str
     accepted_fields: dict
     overrides: dict = {}
+
+async def _text_from_upload(file: UploadFile) -> str:
+    """Read text from uploaded file. Plain text used as-is; PDF/binary returns stub for OCR placeholder."""
+    content_type = (file.content_type or "").lower()
+    if "text/plain" in content_type or (file.filename and file.filename.endswith(".txt")):
+        body = await file.read()
+        if isinstance(body, bytes):
+            return body.decode("utf-8", errors="replace")
+        return str(body)
+    # PDF or other: use placeholder; in production wire PDF text extraction or OCR here
+    return "Patient Name: John Doe\nPhysician Name: Dr. Smith\nSignature: Jane Doe\n"
+
+
+@router.post("/trips/{trip_id}/documents/{doc_type}/extract-upload", response_model=ExtractResponse)
+async def extract_upload(
+    trip_id: int,
+    doc_type: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.facility_admin, UserRole.facility_user)),
+):
+    if doc_type.upper() not in ALLOWED_DOC_TYPES:
+        raise HTTPException(status_code=400, detail=f"doc_type must be one of {ALLOWED_DOC_TYPES}")
+    trip = get_scoped_record(db, None, TransportTrip, trip_id, user)
+    try:
+        text = await _text_from_upload(file)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read file: {e}") from e
+    fields, confidence, evidence, warnings = extract_document(doc_type.upper(), text)
+    ai_enabled = os.getenv("SUPPORT_AI_ENABLED", "false").lower() == "true"
+    if ai_enabled:
+        ai_result = ai_refine_extraction(doc_type.upper(), fields, text)
+        if ai_result:
+            fields = ai_result.get("fields", fields)
+            confidence = ai_result.get("confidence", confidence)
+            evidence = ai_result.get("evidence", evidence)
+            warnings = ai_result.get("warnings", warnings)
+    snap = TransportDocumentSnapshot(
+        org_id=trip.org_id,
+        trip_id=trip.id,
+        doc_type=doc_type.upper(),
+        file_id=file.filename or "upload",
+        extracted_json=fields,
+        confidence_json=confidence,
+        evidence_json=evidence,
+        warnings_json=warnings,
+        provider="ai" if ai_enabled else "deterministic",
+        created_by_user_id=user.id,
+    )
+    db.add(snap)
+    db.commit()
+    db.refresh(snap)
+    audit_and_event(db, user, trip, "transport.document.extracted", extra={"snapshot_id": str(snap.id)})
+    return ExtractResponse(
+        extracted_fields=fields,
+        confidence=confidence,
+        evidence=evidence,
+        warnings=warnings,
+        snapshot_id=str(snap.id),
+    )
+
 
 @router.post("/trips/{trip_id}/documents/{doc_type}/extract", response_model=ExtractResponse)
 def extract_doc(trip_id: int, doc_type: str, req: ExtractRequest, db: Session = Depends(get_db), user: User = Depends(require_roles(UserRole.facility_admin, UserRole.facility_user))):

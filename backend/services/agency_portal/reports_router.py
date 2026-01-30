@@ -63,7 +63,7 @@ def require_agency_finance_access(
 
 @router.get("/incident-summary")
 async def generate_incident_summary_report(
-    format: str = Query("csv", regex="^(csv|pdf)$"),
+    format: str = Query("csv", pattern="^(csv|pdf)$"),
     start_date: Optional[str] = Query(None, description="YYYY-MM-DD format"),
     end_date: Optional[str] = Query(None, description="YYYY-MM-DD format"),
     auth: tuple = Depends(require_agency_finance_access)
@@ -108,7 +108,7 @@ async def generate_incident_summary_report(
 
 @router.get("/documentation-completeness")
 async def generate_documentation_completeness_report(
-    format: str = Query("csv", regex="^(csv|pdf)$"),
+    format: str = Query("csv", pattern="^(csv|pdf)$"),
     start_date: Optional[str] = Query(None, description="YYYY-MM-DD format"),
     end_date: Optional[str] = Query(None, description="YYYY-MM-DD format"),
     auth: tuple = Depends(require_agency_finance_access)
@@ -153,7 +153,7 @@ async def generate_documentation_completeness_report(
 
 @router.get("/claim-status")
 async def generate_claim_status_report(
-    format: str = Query("csv", regex="^(csv|pdf)$"),
+    format: str = Query("csv", pattern="^(csv|pdf)$"),
     start_date: Optional[str] = Query(None, description="YYYY-MM-DD format"),
     end_date: Optional[str] = Query(None, description="YYYY-MM-DD format"),
     auth: tuple = Depends(require_agency_finance_access)
@@ -198,7 +198,7 @@ async def generate_claim_status_report(
 
 @router.get("/payments")
 async def generate_payments_report(
-    format: str = Query("csv", regex="^(csv|pdf)$"),
+    format: str = Query("csv", pattern="^(csv|pdf)$"),
     start_date: Optional[str] = Query(None, description="YYYY-MM-DD format"),
     end_date: Optional[str] = Query(None, description="YYYY-MM-DD format"),
     auth: tuple = Depends(require_agency_finance_access)
@@ -243,7 +243,7 @@ async def generate_payments_report(
 
 @router.get("/aging-summary")
 async def generate_aging_summary_report(
-    format: str = Query("csv", regex="^(csv|pdf)$"),
+    format: str = Query("csv", pattern="^(csv|pdf)$"),
     start_date: Optional[str] = Query(None, description="YYYY-MM-DD format"),
     end_date: Optional[str] = Query(None, description="YYYY-MM-DD format"),
     auth: tuple = Depends(require_agency_finance_access)

@@ -1045,6 +1045,95 @@ def send_message(
     return {"status": "sent", "message_id": message.id}
 
 
+# --- Crew paging: dispatch sends alert/page to crew ---
+class PageCrewPayload(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    message: str = Field(..., min_length=1)
+    priority: Literal["ROUTINE", "URGENT", "EMERGENT", "STAT"] = "ROUTINE"
+    unit_id: Optional[int] = None
+    recipient_ids: Optional[list[int]] = None
+
+
+@router.post("/page")
+def page_crew(
+    payload: PageCrewPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher)),
+):
+    """
+    Send a page/alert to crew (crew paging system).
+    Creates a CrewLinkPage with event_type='page'; crew see it in Crewlink PWA and get sound/vibration by priority.
+    """
+    page = CrewLinkPage(
+        org_id=user.org_id,
+        cad_incident_id=None,
+        event_type="page",
+        title=payload.title,
+        message=payload.message,
+        payload={
+            "priority": payload.priority,
+            "unit_id": payload.unit_id,
+            "recipient_ids": payload.recipient_ids or [],
+            "sent_by_id": user.id,
+            "sent_by_name": user.full_name,
+        },
+    )
+    apply_training_mode(page, request)
+    db.add(page)
+    db.commit()
+    db.refresh(page)
+    audit_and_event(
+        db=db,
+        request=request,
+        user=user,
+        action="create",
+        resource="crewlink_page",
+        classification="COMMS",
+        after_state=model_snapshot(page),
+        event_type="crewlink.page.sent",
+        event_payload={"page_id": page.id, "priority": payload.priority},
+    )
+    # Emit for real-time; socket bridge can broadcast crewlink:page to connected crew
+    return {
+        "status": "ok",
+        "page_id": page.id,
+        "title": payload.title,
+        "priority": payload.priority,
+        "created_at": page.created_at.isoformat() if page.created_at else None,
+    }
+
+
+@router.get("/pages")
+def get_pages(
+    request: Request,
+    limit: int = 50,
+    since_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.dispatcher, UserRole.provider, UserRole.crew)),
+):
+    """List crew pages (alerts) for the org; crew use this to show pager history and new pages."""
+    query = (
+        scoped_query(db, CrewLinkPage, user.org_id, request.state.training_mode)
+        .filter(CrewLinkPage.event_type == "page")
+        .order_by(CrewLinkPage.created_at.desc())
+    )
+    if since_id is not None:
+        query = query.filter(CrewLinkPage.id > since_id)
+    pages = query.limit(limit).all()
+    return [
+        {
+            "id": p.id,
+            "title": p.title,
+            "message": p.message,
+            "priority": p.payload.get("priority", "ROUTINE"),
+            "sent_by": p.payload.get("sent_by_name", ""),
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        }
+        for p in pages
+    ]
+
+
 @router.post("/documents/scan")
 def scan_document(
     payload: DocumentScanPayload,
