@@ -373,9 +373,8 @@ export default function LoginPage() {
             <p className="text-center text-sm text-gray-500">
               Secure enterprise authentication · FusionEMS Quantum
             </p>
-          </div>
         </div>
       </div>
-    </>
+    </div>
   )
 }
