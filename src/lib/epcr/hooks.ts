@@ -49,10 +49,12 @@ export const useEpcrForm = (initialData?: Partial<EpcrRecord> & { variant?: stri
   const validateForm = useCallback(() => {
     const newErrors: ValidationError[] = [];
     
-    if (!formData.patient?.first_name && !formData.first_name) {
+    const firstName = (formData as { patient?: { first_name?: string }; first_name?: string }).patient?.first_name ?? (formData as { first_name?: string }).first_name;
+    const lastName = (formData as { patient?: { last_name?: string }; last_name?: string }).patient?.last_name ?? (formData as { last_name?: string }).last_name;
+    if (!firstName) {
       newErrors.push({ field: "first_name", message: "First name required", severity: "ERROR" });
     }
-    if (!formData.patient?.last_name && !formData.last_name) {
+    if (!lastName) {
       newErrors.push({ field: "last_name", message: "Last name required", severity: "ERROR" });
     }
     if (!formData.chief_complaint) {
@@ -153,7 +155,11 @@ export const useOfflineSync = () => {
       const db = await openIndexedDB();
       const tx = db.transaction("epcr_offline", "readonly");
       const store = tx.objectStore("epcr_offline");
-      const count = await store.count();
+      const count = await new Promise<number>((resolve, reject) => {
+        const req = store.count();
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
       setPendingCount(count);
     } catch (err) {
       console.error("Failed to check pending records:", err);
@@ -165,7 +171,11 @@ export const useOfflineSync = () => {
       const db = await openIndexedDB();
       const tx = db.transaction("epcr_offline", "readwrite");
       const store = tx.objectStore("epcr_offline");
-      const records = await store.getAll();
+      const records = await new Promise<{ id: number; data: unknown }[]>((resolve, reject) => {
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result as { id: number; data: unknown }[]);
+        req.onerror = () => reject(req.error);
+      });
 
       for (const record of records) {
         try {

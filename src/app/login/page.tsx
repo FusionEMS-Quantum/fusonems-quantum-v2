@@ -24,10 +24,11 @@ export default function LoginPage() {
     }
   }, [])
 
-  if (isAuthenticated) {
-    router.push("/dashboard")
-    return null
-  }
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.push("/dashboard")
+    }
+  }, [isAuthenticated, router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -148,7 +149,7 @@ export default function LoginPage() {
               <h1 className="text-5xl font-bold leading-tight">
                 Enterprise EMS Platform
               </h1>
-              <p className="text-xl text-white/80 max-w-md">
+              <p className="text-xl text-white/80 max-w-lg">
                 The complete solution for emergency medical services, fire departments, and HEMS operations.
               </p>
             </div>

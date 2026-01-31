@@ -29,7 +29,7 @@ from utils.write_ops import audit_and_event, model_snapshot
 
 router = APIRouter(
     prefix="/api/v1/scheduling",
-    tags=["Scheduling Module"],
+    tags=["FusionEMS Crew Scheduling"],
     dependencies=[Depends(require_module("SCHEDULING"))],
 )
 

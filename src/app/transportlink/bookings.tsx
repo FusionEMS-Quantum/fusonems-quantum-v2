@@ -7,7 +7,6 @@ import { listTransports, getTransport } from './transportApi';
 // TODO: Import BookingList, BulkActions
 
 import DocumentWorkflowModal from '@/components/transportlink/DocumentWorkflowModal';
-import { useState as useToastState } from 'react';
 
 const STATUS_OPTIONS = [
   'pending',
@@ -17,38 +16,38 @@ const STATUS_OPTIONS = [
   'cancelled',
 ];
 
+type TripRecord = Record<string, unknown> & { id?: string; trip_id?: string; status?: string; trip_status?: string; documents?: { status?: string }[]; compliance_status?: string; document_status?: string; requested_date?: string; date_requested?: string; requested_time?: string; time_requested?: string; patient_summary?: { name?: string }; patient_name?: string };
+
 const Bookings = () => {
-  // Store trips as a map for fast update
-  const [trips, setTrips] = useState({});
+  const [trips, setTrips] = useState<Record<string, TripRecord>>({});
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
-  const [selected, setSelected] = useState([]);
-  const [docModalTrip, setDocModalTrip] = useState(null); // trip object for modal
+  const [selected, setSelected] = useState<string[]>([]);
+  const [docModalTrip, setDocModalTrip] = useState<TripRecord | null>(null);
 
   useEffect(() => {
     setLoading(true);
     listTransports()
-      .then(list => {
-        const map = {};
-        list.forEach(t => { map[t.id || t.trip_id] = t; });
+      .then((list: TripRecord[]) => {
+        const map: Record<string, TripRecord> = {};
+        list.forEach((t: TripRecord) => { map[String(t.id ?? t.trip_id)] = t; });
         setTrips(map);
       })
-      .catch(e => setError(e.message))
+      .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
 
   const tripList = Object.values(trips);
   const filtered = statusFilter
-    ? tripList.filter(t => (t.status || t.trip_status) === statusFilter)
+    ? tripList.filter((t: TripRecord) => (t.status ?? t.trip_status) === statusFilter)
     : tripList;
 
-  const toggleSelect = (id) => {
+  const toggleSelect = (id: string) => {
     setSelected(sel => sel.includes(id) ? sel.filter(x => x !== id) : [...sel, id]);
   };
 
-  // Toast for completion
-  const [toast, setToast] = useToastState(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   return (
     <ProtectedRoute allowedRoles={FACILITY_ROLES}>
@@ -86,12 +85,11 @@ const Bookings = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map(t => {
-                    // Compute doc status indicator from backend fields
+                  {filtered.map((t: TripRecord) => {
                     let docState = 'missing';
                     if (t.documents && Array.isArray(t.documents)) {
                       const total = t.documents.length;
-                      const complete = t.documents.filter(d => d.status === 'complete').length;
+                      const complete = (t.documents as { status?: string }[]).filter(d => d.status === 'complete').length;
                       if (complete === 0) docState = 'missing';
                       else if (complete < total) docState = 'partial';
                       else docState = 'complete';
@@ -108,8 +106,8 @@ const Bookings = () => {
                         <td>
                           <input
                             type="checkbox"
-                            checked={selected.includes(t.id || t.trip_id)}
-                            onChange={() => toggleSelect(t.id || t.trip_id)}
+                            checked={selected.includes(String(t.id ?? t.trip_id))}
+                            onChange={() => toggleSelect(String(t.id ?? t.trip_id))}
                             disabled={incomplete}
                             title={incomplete ? 'Required documents must be completed before submission' : ''}
                           />
@@ -148,11 +146,11 @@ const Bookings = () => {
             </form>
             {docModalTrip && (
               <DocumentWorkflowModal
-                trip={trips[docModalTrip.id || docModalTrip.trip_id]}
+                trip={trips[String(docModalTrip.id ?? docModalTrip.trip_id)]}
                 onClose={() => setDocModalTrip(null)}
-                updateTrip={async (id) => {
-                  const trip = await getTransport(id);
-                  setTrips(trips => ({ ...trips, [id]: trip }));
+                updateTrip={async (id: string) => {
+                  const trip = await getTransport(id) as TripRecord;
+                  setTrips(prev => ({ ...prev, [id]: trip }));
                 }}
                 onAllComplete={() => {
                   setDocModalTrip(null);

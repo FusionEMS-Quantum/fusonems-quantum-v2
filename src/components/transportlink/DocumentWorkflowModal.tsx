@@ -9,18 +9,23 @@ const REQUIRED_DOCS = [
 ];
 
 
-export default function DocumentWorkflowModal({ trip, onClose, updateTrip, onAllComplete }) {
+export default function DocumentWorkflowModal({ trip, onClose, updateTrip, onAllComplete }: {
+  trip: { id?: number | string; trip_id?: number | string; patient_name?: string; requested_date?: string; date_requested?: string; documents?: { type?: string; status?: string }[] };
+  onClose: () => void;
+  updateTrip?: (id: number | string) => Promise<void>;
+  onAllComplete?: () => void;
+}) {
   const [step, setStep] = useState(0);
   const [completed, setCompleted] = useState([false, false, false, false]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   // Form state for each doc type
   const [pcsForm, setPcsForm] = useState({ summary: '', items: '' });
   const [aobForm, setAobForm] = useState({ insurance: '', signature: '' });
   const [abdForm, setAbdForm] = useState({ accepted: false, signature: '' });
-  const [facesheetFile, setFacesheetFile] = useState(null);
+  const [facesheetFile, setFacesheetFile] = useState<File | null>(null);
 
   // Update completed state from trip.documents if available
   React.useEffect(() => {
@@ -50,27 +55,33 @@ export default function DocumentWorkflowModal({ trip, onClose, updateTrip, onAll
     setError(null); setSuccess(null);
   };
 
+  const tripId = trip.id ?? trip.trip_id;
+  const tripIdNum = tripId != null ? Number(tripId) : undefined;
+
   // Submission handlers for each doc type
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (tripIdNum == null) return;
     setLoading(true);
     setError(null);
     setSuccess(null);
     try {
       if (step === 0) {
-        await submitPCS(trip.id || trip.trip_id, pcsForm);
+        await submitPCS(tripIdNum, pcsForm);
       } else if (step === 1) {
-        await submitAOB(trip.id || trip.trip_id, aobForm);
+        await submitAOB(tripIdNum, aobForm);
       } else if (step === 2) {
-        await submitABD(trip.id || trip.trip_id, abdForm);
+        await submitABD(tripIdNum, abdForm);
       } else if (step === 3) {
         if (!facesheetFile) throw new Error('Please select a file');
-        await uploadFacesheet(trip.id || trip.trip_id, facesheetFile);
+        await uploadFacesheet(tripIdNum, facesheetFile);
       }
       setSuccess('Submitted!');
-      if (updateTrip) await updateTrip(trip.id || trip.trip_id);
+      if (updateTrip && tripId !== undefined && tripId !== null) {
+        await updateTrip(tripId as string | number);
+      }
     } catch (err) {
-      setError(err.message);
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -82,7 +93,7 @@ export default function DocumentWorkflowModal({ trip, onClose, updateTrip, onAll
   };
 
   // Render form for current step
-  let formContent = null;
+  let formContent: React.ReactNode = null;
   if (step === 0) {
     formContent = (
       <form onSubmit={handleSubmit}>
@@ -140,7 +151,7 @@ export default function DocumentWorkflowModal({ trip, onClose, updateTrip, onAll
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: 8 }}>
           <label>Upload Facesheet (PDF or image)<br />
-            <input type="file" accept="application/pdf,image/*" onChange={e => setFacesheetFile(e.target.files[0])} required />
+            <input type="file" accept="application/pdf,image/*" onChange={e => setFacesheetFile(e.target.files?.[0] ?? null)} required />
           </label>
         </div>
         <button type="submit" disabled={loading || completed[3]}>Upload Facesheet</button>

@@ -1345,6 +1345,55 @@ body {
   margin: 0 0 1rem;
 }
 
+.billing-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+
+.billing-selector-btn {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--charcoal-300);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
+}
+
+.billing-selector-btn:hover {
+  color: #fff;
+  background: rgba(249, 115, 22, 0.1);
+  border-color: rgba(249, 115, 22, 0.5);
+}
+
+.billing-selector-btn--active {
+  color: #fff;
+  background: rgba(249, 115, 22, 0.2);
+  border-color: var(--orange-500);
+}
+
+.billing-copy-panel {
+  text-align: left;
+  max-width: 36rem;
+  margin: 0 auto 1.25rem;
+}
+
+.billing-copy-panel .billing-desc {
+  text-align: left;
+}
+
+.billing-pricing-note {
+  font-size: 0.875rem;
+  color: var(--charcoal-400);
+  margin: 0 0 1.5rem;
+  font-style: italic;
+}
+
 .billing-sub {
   font-size: 1rem;
   color: var(--orange-400);

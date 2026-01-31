@@ -18,14 +18,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const form = new formidable.IncomingForm()
   form.parse(req, async (err, fields, files) => {
     if (err) return res.status(400).json({ error: "Upload error" })
-    const file = files.file
-    if (!file) return res.status(400).json({ error: "No file uploaded" })
-    // Simulate upload: just move to /tmp for now
-    const dest = `/tmp/${bucket}_${orgId}_${file.originalFilename}`
-    fs.copyFileSync(file.filepath, dest)
+    const raw = files.file
+    const file = Array.isArray(raw) ? raw[0] : raw
+    if (!file || typeof file === "undefined") return res.status(400).json({ error: "No file uploaded" })
+    const f = file as { originalFilename?: string; filepath: string }
+    const name = f.originalFilename ?? "upload"
+    const dest = `/tmp/${bucket}_${orgId}_${name}`
+    fs.copyFileSync(f.filepath, dest)
     return res.status(200).json({
       message: "File uploaded (simulated)",
-      key: `${bucket}/${orgId}/${file.originalFilename}`
+      key: `${bucket}/${orgId}/${name}`
     })
   })
 }

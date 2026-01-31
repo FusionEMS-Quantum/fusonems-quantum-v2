@@ -47,3 +47,45 @@ export async function applyDoc(
   }
   return res.json();
 }
+
+/** Submit PCS (Patient Care Summary) */
+export async function submitPCS(
+  tripId: number,
+  form: { summary: string; items: string }
+): Promise<{ trip: Record<string, unknown> }> {
+  return applyDoc(tripId, "PCS", {
+    snapshot_id: "",
+    accepted_fields: form as unknown as Record<string, unknown>,
+  });
+}
+
+/** Submit AOB (Authorization of Benefits) */
+export async function submitAOB(
+  tripId: number,
+  form: { insurance: string; signature: string }
+): Promise<{ trip: Record<string, unknown> }> {
+  return applyDoc(tripId, "AOB", {
+    snapshot_id: "",
+    accepted_fields: form as unknown as Record<string, unknown>,
+  });
+}
+
+/** Submit ABD (Advance Beneficiary Notice) */
+export async function submitABD(
+  tripId: number,
+  form: { accepted: boolean; signature: string }
+): Promise<{ trip: Record<string, unknown> }> {
+  return applyDoc(tripId, "ABD", {
+    snapshot_id: "",
+    accepted_fields: form as unknown as Record<string, unknown>,
+  });
+}
+
+/** Upload facesheet */
+export async function uploadFacesheet(tripId: number, file: File): Promise<{ trip: Record<string, unknown> }> {
+  const extracted = await extractUpload(tripId, "FACESHEET", file);
+  return applyDoc(tripId, "FACESHEET", {
+    snapshot_id: extracted.snapshot_id,
+    accepted_fields: extracted.extracted_fields as unknown as Record<string, unknown>,
+  });
+}

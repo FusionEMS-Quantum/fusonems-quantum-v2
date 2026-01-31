@@ -394,8 +394,8 @@ const HRDashboard = () => {
             {[
               { label: 'Add Personnel', icon: UserPlus, href: '/hr/personnel' },
               { label: 'View Certifications', icon: Award, href: '/hr/certifications' },
-              { label: 'Manage Schedule', icon: Calendar, href: '/hr/scheduling' },
-              { label: 'Process Payroll', icon: DollarSign, href: '/hr/payroll' },
+              { label: 'Schedule (Crew Scheduling)', icon: Calendar, href: '/hr/scheduling' },
+              { label: 'Payroll (HR)', icon: DollarSign, href: '/hr/payroll' },
             ].map((action, idx) => (
               <motion.a
                 key={idx}

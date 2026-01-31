@@ -17,13 +17,13 @@ export default function Dashboard() {
   const { data: unitsData } = useQuery({
     queryKey: ['units'],
     queryFn: getUnits,
-    refetchInterval: socketConnected ? 30000 : 5000,
+    refetchInterval: () => socketConnected ? 30000 : 5000,
   })
 
   const { data: incidentsData } = useQuery({
     queryKey: ['incidents'],
     queryFn: getIncidents,
-    refetchInterval: socketConnected ? 30000 : 8000,
+    refetchInterval: () => socketConnected ? 30000 : 8000,
   })
 
   useEffect(() => {

@@ -108,6 +108,7 @@ export default function SpacedReviewPage() {
       }, 1000);
       return () => clearInterval(timer);
     }
+    return () => {};
   }, [studySession]);
 
   const startStudySession = (deckId: string) => {
