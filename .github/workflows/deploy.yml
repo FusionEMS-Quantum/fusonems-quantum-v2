@@ -1,0 +1,48 @@
+# Deploy to DigitalOcean Droplet on every push to main.
+# Required secrets: DEPLOY_HOST, DEPLOY_USER, DEPLOY_KEY, DEPLOY_PATH
+# Flow: checkout → rsync (no git on server) → docker compose up -d --build
+name: Deploy to DigitalOcean Droplet
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy via SSH
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Sync code to Droplet
+        run: |
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            --exclude 'backend/.env' \
+            --exclude '.env' \
+            --exclude '.env.local' \
+            --exclude '.env.production' \
+            --exclude 'node_modules' \
+            --exclude '.next' \
+            --exclude '.git' \
+            ./ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/ 
+
+      - name: Build and restart on Droplet
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          script: |
+            set -e
+            cd "${{ secrets.DEPLOY_PATH }}"
+            if [ ! -f backend/.env ]; then cp backend/.env.example backend/.env 2>/dev/null || true; fi
+            docker compose up -d --build
