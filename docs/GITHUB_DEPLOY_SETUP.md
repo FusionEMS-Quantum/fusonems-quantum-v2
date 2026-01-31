@@ -16,7 +16,7 @@ All four secrets are required. If `DEPLOY_HOST` is missing you’ll see: `Could 
 |--------|-------|
 | `DEPLOY_HOST` | Droplet IP (e.g. `157.245.6.217`) |
 | `DEPLOY_USER` | `deploy` |
-| `DEPLOY_KEY` | Full contents of the private SSH key (including `-----BEGIN...` and `-----END...`) |
+| `DEPLOY_KEY` | Full private SSH key. Paste the **entire** key including `-----BEGIN...` and `-----END...`. No extra spaces or CRLF. |
 | `DEPLOY_PATH` | `/var/www/fusionems` |
 
 ## 2. Droplet Setup (one-time)
@@ -50,3 +50,7 @@ git push origin main
 ```
 
 Check **Actions** in GitHub to see the deploy run. Code is synced via rsync (no git pull on server).
+
+## Troubleshooting
+
+- **`error in libcrypto` / `Permission denied (publickey)`** – `DEPLOY_KEY` format issue. Re-add the secret: copy the full private key (from `-----BEGIN` to `-----END` inclusive), paste into a plain text editor, ensure no extra spaces or Windows line endings, then paste into GitHub. Use the **private** key; the **public** key goes in `authorized_keys` on the Droplet.
