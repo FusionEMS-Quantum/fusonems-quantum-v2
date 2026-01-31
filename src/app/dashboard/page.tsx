@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "../../lib/auth-context"
 import { ProtectedRoute } from "../../lib/protected-route"
@@ -7,6 +8,22 @@ import { ProtectedRoute } from "../../lib/protected-route"
 function DashboardContent() {
   const router = useRouter()
   const { user, logout } = useAuth()
+
+  useEffect(() => {
+    if (user?.role && ["founder", "admin", "superadmin"].includes(user.role)) {
+      router.replace("/founder")
+    }
+  }, [user?.role, router])
+
+  if (user?.role && ["founder", "admin", "superadmin"].includes(user.role)) {
+    return (
+      <main className="page-shell">
+        <div className="page-container flex items-center justify-center">
+          <p style={{ color: "rgba(247, 246, 243, 0.72)" }}>Redirecting to Founder Dashboard...</p>
+        </div>
+      </main>
+    )
+  }
 
   const handleLogout = () => {
     logout()

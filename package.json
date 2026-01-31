@@ -7,7 +7,10 @@
     "build": "NODE_OPTIONS='--max-old-space-size=4096' next build",
     "typecheck": "tsc --noEmit",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "biome check --max-diagnostics=200 . && eslint .",
+    "lint:fix": "biome check --write . && eslint --fix .",
+    "format": "biome format --write .",
+    "check": "biome check ."
   },
   "dependencies": {
     "@stripe/react-stripe-js": "^5.5.0",
@@ -36,11 +39,13 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.3.13",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20.19.30",
     "@types/react": "^19.2.10",
     "@types/react-dom": "^19",
     "eslint": "^9",
+    "eslint-config-biome": "^2.1.3",
     "eslint-config-next": "16.1.4",
     "tailwindcss": "^4",
     "typescript": "^5"
