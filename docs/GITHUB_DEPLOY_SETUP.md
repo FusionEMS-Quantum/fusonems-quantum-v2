@@ -10,6 +10,8 @@ The Droplet does **not** clone the repo, does **not** need GitHub access, deploy
 
 In your repo: **Settings → Secrets and variables → Actions → New repository secret**
 
+All four secrets are required. If `DEPLOY_HOST` is missing you’ll see: `Could not resolve hostname`.
+
 | Secret | Value |
 |--------|-------|
 | `DEPLOY_HOST` | Droplet IP (e.g. `157.245.6.217`) |
