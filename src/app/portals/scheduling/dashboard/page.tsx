@@ -44,11 +44,7 @@ export default function SchedulingDashboard() {
   ]
 
   return (
-    <PortalDashboardShell
-      portalName="Scheduling Portal"
-      portalGradient="from-indigo-600 to-purple-600"
-      navItems={navItems}
-    >
+    <PageShell title="Scheduling Portal" requireAuth={true}>
       <div className="space-y-8">
         <div>
           <h2 className="text-4xl font-black text-white mb-2">Workforce Scheduling</h2>

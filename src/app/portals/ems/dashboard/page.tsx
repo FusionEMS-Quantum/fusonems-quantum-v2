@@ -44,11 +44,7 @@ export default function EmsDashboard() {
   ]
 
   return (
-    <PortalDashboardShell
-      portalName="EMS Portal"
-      portalGradient="from-red-600 to-orange-600"
-      navItems={navItems}
-    >
+    <PageShell title="EMS Portal" requireAuth={true}>
       <div className="space-y-8">
         <div>
           <h2 className="text-4xl font-black text-white mb-2">EMS Command Center</h2>
