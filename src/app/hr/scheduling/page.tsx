@@ -63,6 +63,7 @@ const ScheduleManager = () => {
   const [scheduleData, setScheduleData] = useState(mockScheduleData);
   const [loading, setLoading] = useState(true);
   const [apiAvailable, setApiAvailable] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const getWeekStartEnd = useCallback((weekOffset: number) => {
     const d = new Date();

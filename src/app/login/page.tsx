@@ -5,10 +5,11 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { apiFetch } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
+import { defaultRoleHome } from "@/lib/access"
 
 export default function LoginPage() {
   const router = useRouter()
-  const { isAuthenticated } = useAuth()
+  const { user, isAuthenticated, loading: authLoading } = useAuth()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -17,18 +18,22 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const storedEmail = localStorage.getItem("remember_email")
-    if (storedEmail) {
-      setEmail(storedEmail)
-      setRememberMe(true)
+    try {
+      const storedEmail = typeof window !== "undefined" ? localStorage.getItem("remember_email") : null
+      if (storedEmail) {
+        setEmail(storedEmail)
+        setRememberMe(true)
+      }
+    } catch {
+      // localStorage unavailable
     }
   }, [])
 
   useEffect(() => {
-    if (isAuthenticated) {
-      router.push("/dashboard")
+    if (!authLoading && isAuthenticated && user) {
+      router.replace(defaultRoleHome(user.role))
     }
-  }, [isAuthenticated, router])
+  }, [authLoading, isAuthenticated, user, router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -37,7 +42,7 @@ export default function LoginPage() {
 
     try {
       const response = await apiFetch<{ access_token: string; user?: { role?: string; must_change_password?: boolean } }>(
-        "/auth/login",
+        "/api/auth/login",
         {
           method: "POST",
           body: JSON.stringify({ email, password }),
@@ -122,6 +127,17 @@ export default function LoginPage() {
       description: "Real-time threat detection and security monitoring"
     }
   ]
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" aria-hidden />
+          <p className="text-zinc-400 text-sm">Loading...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-zinc-950 flex">

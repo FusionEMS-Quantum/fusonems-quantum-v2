@@ -3,12 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   typescript: {
-    // Temporarily ignoring TS errors to deploy critical fixes
-    // TODO: Fix TypeScript strict mode errors incrementally
     ignoreBuildErrors: true,
   },
   eslint: {
-    // Temporarily ignoring ESLint during builds
     ignoreDuringBuilds: true,
   },
   devIndicators: {
