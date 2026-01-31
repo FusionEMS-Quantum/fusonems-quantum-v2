@@ -8,7 +8,14 @@ The Droplet does **not** clone the repo, does **not** need GitHub access, deploy
 
 ## 1. GitHub Secrets
 
-In your repo: **Settings → Secrets and variables → Actions → New repository secret**
+**Quick (if you have `gh` and `~/.ssh/id_ed25519`):**
+
+```bash
+gh auth login   # one-time, if needed
+./scripts/add-deploy-secret.sh   # adds private key to DEPLOY_KEY
+```
+
+**Or manually:** In your repo: **Settings → Secrets and variables → Actions → New repository secret**
 
 All four secrets are required. If `DEPLOY_HOST` is missing you’ll see: `Could not resolve hostname`.
 
